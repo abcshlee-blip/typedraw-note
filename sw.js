@@ -1,10 +1,10 @@
 /* TypeDraw 노트 — 오프라인 우선 Service Worker */
-const CACHE = 'typedraw-note-v7';
+const CACHE = 'typedraw-note-v8';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=7',
-  './app.js?v=7',
+  './styles.css?v=8',
+  './app.js?v=8',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -12,6 +12,8 @@ const CORE = [
 ];
 
 self.addEventListener('install', (event) => {
+  // 새 워커를 '대기'시키지 않고 바로 활성화 단계로 올린다
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE)
       .then((cache) => Promise.all(
@@ -27,7 +29,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
+      .then(() => self.clients.claim())   // 열려 있는 화면도 바로 새 워커가 맡는다
   );
 });
 
@@ -36,6 +38,9 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
+
+  // 버전 확인 파일은 캐시에 담지 않고 항상 네트워크에서 받는다
+  if (url.pathname.endsWith('/version.txt')) return;
 
   // 페이지 이동: 네트워크 우선, 실패하면 캐시된 index.html
   if (req.mode === 'navigate') {
@@ -68,7 +73,7 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  // 같은 출처 자산: 캐시 우선
+  // 같은 출처 자산: 캐시 우선 (파일 이름에 ?v=버전을 붙여 새 버전 때 새 주소가 되게 한다)
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;

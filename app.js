@@ -2440,18 +2440,34 @@
        · 열려 있는 창·메뉴(목차·검색·설정·더보기/삽입 메뉴·이름 입력·확인 대화상자)가 있으면 그것부터 닫고,
        · 노트 편집 화면에서는 책장으로 돌아가고,
        · 책장에서는 '종료할까요?' 확인을 띄운다.
-     history.pushState로 가짜 기록을 하나 쌓아 두어, 뒤로가기가 페이지를 벗어나기 전에 popstate로 잡는다. */
-  var nav = { guard: false, leaving: false, exitOpen: false };
+     ★ 크로미움(삼성 인터넷·크롬)의 History Manipulation Intervention 주의 ★
+       사용자 입력(터치·클릭·키) 없이 pushState로 쌓은 기록은 '뒤로가기에서 건너뛸 기록'으로
+       표시되고, 그 표시는 같은 문서의 모든 기록에 함께 붙는다. 이 상태에서 뒤로가기를 누르면
+       기록을 한 칸씩 물러나는 게 아니라 앱을 통째로 벗어나 버린다(폰에서는 앱이 바로 닫힘).
+       또 뒤로/앞으로 이동을 한 번 하면, 새 입력이 들어오기 전까지는 그 입력을 쌓기에 인정하지 않는다.
+       그래서
+         · 페이지를 열 때는 기록을 쌓지 않는다(쌓아 봐야 건너뛸 기록이 될 뿐이다).
+         · 사용자 제스처(pointerdown·touchstart·click·keydown) 안에서만 GUARD_DEPTH칸까지 쌓는다.
+         · 뒤로가기로 한 칸 빠지면, popstate 안에서는 다시 쌓지 않고(그러면 건너뛸 기록이 된다)
+           다음 제스처에서 그만큼 다시 채운다.
+       이렇게 하면 뒤로가기는 언제나 '사용자가 만든 기록'만 지나므로 앱이 갑자기 닫히지 않는다. */
+  var GUARD_DEPTH = 3;                 // 뒤로가기 한 번에 물러날 수 있는 여유 칸 수
+  var nav = { depth: 0, leaving: false, leaveHops: 0, exitOpen: false, pendingUpdate: null };
   var activePromptCancel = null;   // 열려 있는 이름 입력창을 뒤로가기로 닫을 때
   var activeConfirmCancel = null;  // 열려 있는 확인 대화상자를 뒤로가기로 닫을 때
 
-  // 가짜 기록을 다시 쌓는다(이미 있으면 그대로)
+  // 뒤로가기 여유 기록을 GUARD_DEPTH칸까지 채운다 — 반드시 사용자 제스처 안에서 부른다.
+  // (제스처 밖에서 부르면 브라우저가 '건너뛸 기록'으로 표시해 오히려 앱이 바로 닫힌다)
   function armGuard() {
-    if (nav.guard) return;
-    try {
-      history.pushState({ typedraw: 'guard' }, '');
-      nav.guard = true;
-    } catch (e) {}
+    if (nav.leaving) return;
+    var tries = 0;
+    while (nav.depth < GUARD_DEPTH && tries < GUARD_DEPTH) {
+      tries++;
+      try {
+        history.pushState({ typedraw: 'guard', d: nav.depth + 1 }, '');
+      } catch (e) { return; }
+      nav.depth++;
+    }
   }
 
   function openExitConfirm() {
@@ -2469,13 +2485,24 @@
     $('#exitModal').hidden = true;
   }
 
-  // [종료] — 가드를 풀고 실제로 뒤로 빠져나간다(PWA에서는 이걸로 앱이 닫힌다)
+  // [종료] — 쌓아 둔 가짜 기록을 모두 지나 실제로 앱 밖으로 나간다(PWA에서는 이걸로 앱이 닫힌다)
   function quitApp() {
     closeExitConfirm();
     flushSave();
     nav.leaving = true;
-    nav.guard = false;
-    try { history.back(); } catch (e) {}
+    nav.leaveHops = 0;
+    stepOut();
+  }
+
+  // 가짜 기록을 한 칸씩 물러난다. 남은 기록이 없으면 문서가 빠져나가면서 페이지가 닫힌다.
+  // (history.back/go는 브라우저 UI가 아니라서 위의 '건너뛰기' 규칙에 걸리지 않는다)
+  function stepOut() {
+    if (nav.leaveHops++ >= 8) {   // 안전장치: 끝없이 물러나지 않게
+      nav.leaving = false;
+      nav.depth = 0;
+      return;
+    }
+    try { history.go(-1); } catch (e) {}
   }
 
   // 뒤로가기 한 번에 닫을 것이 있으면 닫는다
@@ -2507,17 +2534,22 @@
 
   function initBackGuard() {
     try { history.replaceState({ typedraw: 'base' }, ''); } catch (e) {}
-    armGuard();
+    // 로드 때는 기록을 쌓지 않는다(위 주석 참고). 첫 제스처에서 armGuard()가 채운다.
+
     window.addEventListener('popstate', function () {
-      if (nav.leaving) {
-        // [종료] 확정 — 남은 기록 한 칸을 더 물러나 앱 밖으로 나간다
-        try { history.back(); } catch (e) {}
-        return;
-      }
-      nav.guard = false;   // 방금 가짜 기록이 빠졌다
+      if (nav.leaving) { stepOut(); return; }   // [종료] 확정 — 남은 기록을 계속 물러난다
+      if (nav.depth > 0) nav.depth--;           // 방금 여유 기록 한 칸이 빠졌다
       handleBack();
-      armGuard();          // 다음 뒤로가기도 똑같이 막아 둔다
+      // 여기서 다시 쌓지 않는다: 뒤로/앞으로 이동 직후에 쌓은 기록은 '건너뛸 기록'이 되어
+      // 정작 다음 뒤로가기에서 앱이 닫힌다. 다음 제스처에서 armGuard()가 다시 채운다.
     });
+
+    // 사용자 제스처가 들어올 때마다 여유 기록을 확인하고 모자라면 채운다.
+    // (제스처 안에서 쌓은 기록만 브라우저가 '사용자가 만든 기록'으로 인정한다)
+    var marks = ['pointerdown', 'touchstart', 'click', 'keydown'];
+    for (var i = 0; i < marks.length; i++) {
+      document.addEventListener(marks[i], armGuard, { capture: true, passive: true });
+    }
   }
 
   /* ─────────── 이벤트 연결 ─────────── */
@@ -2747,11 +2779,77 @@
     window.addEventListener('pagehide', flushSave);
   }
 
-  /* ─────────── 서비스 워커 ─────────── */
+  /* ─────────── 서비스 워커 · 새 버전 ─────────── */
+  var APP_VERSION = '8';
+  var UPDATE_KEY = 'typedraw-updated-';
+
+  // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)
+  function isEditing() {
+    return !$('#noteView').hidden || !$('#promptModal').hidden || !$('#confirmModal').hidden;
+  }
+
+  // 새 버전으로 한 번만 새로고침한다(같은 버전에서 되풀이하지 않아 무한 새로고침이 없다)
+  function reloadForUpdate(version) {
+    try {
+      if (sessionStorage.getItem(UPDATE_KEY + version) === '1') return false;
+      sessionStorage.setItem(UPDATE_KEY + version, '1');
+    } catch (e) {}
+    flushSave();
+    try { window.location.reload(); } catch (e) {}
+    return true;
+  }
+
+  // 새 버전이 있으면 적용한다. 쓰는 중이면 방해하지 않고 알리기만 한다.
+  function applyUpdate(version) {
+    nav.pendingUpdate = version;
+    if (!isEditing()) { reloadForUpdate(version); return; }
+    toast('새 버전을 준비했어요. 앱을 다시 열면 적용됩니다');
+  }
+
+  // version.txt로 지금 화면의 코드가 서버의 최신 버전과 같은지 확인
+  // (GitHub Pages가 index.html을 잠깐 캐시해도 새 버전이 나오도록 하는 안전장치)
+  function checkVersion() {
+    if (!window.fetch) return;
+    fetch('version.txt?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (t) {
+        var v = (t || '').trim();
+        if (v && v !== APP_VERSION) applyUpdate(v);
+      })
+      .catch(function () {});
+  }
+
   function registerSW() {
     if (!('serviceWorker' in navigator)) return;
+
+    var hadController = !!navigator.serviceWorker.controller;
+    var swUpdated = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController) { hadController = true; return; }   // 첫 설치: 이 화면은 이미 최신
+      if (!swUpdated) return;                                  // 단순 인수: 이미 받은 파일로 충분
+      applyUpdate(APP_VERSION);                                // 쓰는 중에 새 워커가 넘겨받았다
+    });
+
+    // 쓰던 중이면 화면이 가려지는 순간(앱을 벗어났다 돌아오는 순간) 새 버전으로 넘어간다
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden' && nav.pendingUpdate && !isEditing()) {
+        reloadForUpdate(nav.pendingUpdate);
+      }
+    });
+
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('SW 등록 실패', e); });
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+        .then(function (reg) {
+          reg.addEventListener('updatefound', function () { swUpdated = true; });
+          try { reg.update(); } catch (e) {}   // 열릴 때마다 새 워커 확인
+          checkVersion();
+          document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState !== 'visible') return;
+            try { reg.update(); } catch (e) {}
+            checkVersion();
+          });
+        })
+        .catch(function (e) { console.warn('SW 등록 실패', e); });
     });
   }
 
