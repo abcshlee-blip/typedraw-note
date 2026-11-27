@@ -417,37 +417,73 @@
   }
 
   /* ─────────── 실행 취소 ─────────── */
+  /* 한 칸에 관련된 쪽들의 상태를 함께 담는다 — 사진이 쪽을 건너간 이동도 한 번에 되돌아간다. */
   function snap(page) { return JSON.stringify({ strokes: page.strokes, objects: page.objects }); }
-  function pushUndo(page) {
-    if (!page) return;
+  function undoEntry(pages) {
+    var states = [];
+    pages.forEach(function (p) {
+      if (!p) return;
+      states.push({ pageId: p.id, s: JSON.parse(snap(p)) });
+    });
+    return JSON.stringify({ states: states });
+  }
+  /* 되돌리기 기록 한 칸에 담긴 쪽들과 그때의 상태 */
+  function entryPages(raw) {
+    var e;
+    try { e = JSON.parse(raw); } catch (err) { return []; }
+    var out = [];
+    ((e && e.states) || []).forEach(function (st) {
+      var p = pageById(st.pageId);
+      if (p) out.push({ page: p, s: st.s });
+    });
+    return out;
+  }
+  function pushEntry(page, entry) {
+    if (!page || !entry) return;
     if (!page._undo) page._undo = [];
-    page._undo.push(snap(page));
+    page._undo.push(entry);
     if (page._undo.length > 40) page._undo.shift();
     page._redo = [];
     updateUndoButtons();
   }
+  function pushUndo(page) { if (page) pushEntry(page, undoEntry([page])); }
+  /* 이미 떠 둔 상태를 그대로 한 칸 쌓는다(끌기 시작할 때의 상태를 쓰기 위해) */
+  function pushUndoState(page, entry) { pushEntry(page, entry); }
   function canUndo() { var p = activePage(); return !!(p && p._undo && p._undo.length); }
   function canRedo() { var p = activePage(); return !!(p && p._redo && p._redo.length); }
+
+  function restoreStates(list) {
+    list.forEach(function (it) {
+      it.page.strokes = it.s.strokes;
+      it.page.objects = it.s.objects;
+      it.page.updatedAt = Date.now();
+      rerenderPage(it.page);
+      syncHint(it.page);
+    });
+  }
 
   function undo() {
     var p = activePage();
     if (!p || !p._undo || !p._undo.length) return;
+    var list = entryPages(p._undo[p._undo.length - 1]);
+    p._undo.pop();
+    if (!list.length) { updateUndoButtons(); return; }
     if (!p._redo) p._redo = [];
-    p._redo.push(snap(p));
-    var s = JSON.parse(p._undo.pop());
-    p.strokes = s.strokes; p.objects = s.objects;
-    rerenderPage(p);
+    p._redo.push(undoEntry(list.map(function (it) { return it.page; })));
+    restoreStates(list);
     markDirty();
     updateUndoButtons();
   }
   function redo() {
     var p = activePage();
     if (!p || !p._redo || !p._redo.length) return;
+    var list = entryPages(p._redo[p._redo.length - 1]);
+    p._redo.pop();
+    if (!list.length) { updateUndoButtons(); return; }
     if (!p._undo) p._undo = [];
-    p._undo.push(snap(p));
-    var s = JSON.parse(p._redo.pop());
-    p.strokes = s.strokes; p.objects = s.objects;
-    rerenderPage(p);
+    p._undo.push(undoEntry(list.map(function (it) { return it.page; })));
+    if (p._undo.length > 40) p._undo.shift();
+    restoreStates(list);
     markDirty();
     updateUndoButtons();
   }
@@ -685,7 +721,23 @@
     if (!pageEl) return;
     redrawInk(page);
     renderObjects(pageEl, page);
+    syncHint(page);
     updateUndoButtons();
+  }
+
+  /* 쪽이 비었는지에 맞춰 안내문을 붙이거나 뗀다(사진이 다른 쪽으로 넘어가 빈 쪽이 될 때 등) */
+  function syncHint(page) {
+    if (!page) return;
+    var pageEl = $('#spread .page[data-page-id="' + page.id + '"]');
+    if (!pageEl) return;
+    var h = pageEl.querySelector('.hint-layer');
+    if (isEmptyPage(page)) {
+      if (h) return;
+      pageEl.appendChild(el('div', 'hint-layer',
+        state.tool === 'text' ? '탭해서 글자를 넣어 보세요' : (isDrawTool() ? '여기에 그려 보세요' : '탭해서 시작')));
+    } else if (h) {
+      h.remove();
+    }
   }
 
   /* ─────────── 잉크(스트로크) 그리기 ─────────── */
@@ -1092,48 +1144,156 @@
     }
   }
 
+  function objHeight(obj) {
+    if (obj.type !== 'image') return 0;
+    return obj.h || obj.w * 0.72;
+  }
+
+  /* 이 화면 좌표가 어느 쪽 종이 위인지(없으면 null). 두 쪽 보기에서 쪽을 건너갈 때 쓴다.
+     빈 자리(쪽이 없는 슬롯)에는 .page가 없으므로 자연히 잡히지 않는다. */
+  function pageElAtPoint(x, y) {
+    var pages = $$('#spread .page');
+    for (var i = 0; i < pages.length; i++) {
+      var r = pages[i].getBoundingClientRect();
+      if (r.width && r.height && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return pages[i];
+    }
+    return null;
+  }
+
   /* 끌어서 옮기기 — 마우스 왼쪽·S펜·손가락이 같은 경로를 쓴다.
+     2쪽 보기에서는 사진 중심이 반대쪽 종이로 넘어가면 그 쪽 객체로 옮겨 담는다(v16).
      실제로 움직이기 시작할 때만 되돌리기 기록을 남기고, 놓으면 자동 저장한다. */
   function startMove(e, obj, page, pageEl, wrapEl) {
-    var r = pageEl.getBoundingClientRect();
+    var capEl = $('#stage') || document.body;
+    var pid = e.pointerId;
     var sx = e.clientX, sy = e.clientY;
-    var ox = obj.x, oy = obj.y;
-    var unitX = PW / r.width, unitY = PH / r.height;
-    var moved = false, snapshotted = false;
+    var r0 = pageEl.getBoundingClientRect();
+    var ux0 = PW / r0.width, uy0 = PH / r0.height;
+    var grabX = (e.clientX - r0.left) * ux0 - obj.x;   // 사진 안에서 잡은 지점(쪽 좌표)
+    var grabY = (e.clientY - r0.top) * uy0 - obj.y;
+    var moved = false, crossed = false;
+    var originPage = page, originSnap = null, otherSnap = null;   // 되돌리기용
+    var curPage = page, curPageEl = pageEl;
 
-    try { wrapEl.setPointerCapture(e.pointerId); } catch (err) {}
+    try { capEl.setPointerCapture(pid); } catch (err) {}
     wrapEl.classList.add('moving');
 
+    function place() {
+      wrapEl.style.left = (obj.x / PW * 100) + '%';
+      wrapEl.style.top = (obj.y / PH * 100) + '%';
+      wrapEl.style.width = (obj.w / PW * 100) + '%';
+    }
+
+    /* 끌고 있는 동안은 종이 밖으로 나가도 잘리지 않고 두 쪽 사이를 넘나들 수 있게 */
+    function setDragPage(el) {
+      if (curPageEl === el) return;
+      curPageEl.classList.remove('obj-dragging');
+      curPageEl = el;
+      curPageEl.classList.add('obj-dragging');
+    }
+
+    /* 사진을 다른 쪽 객체 목록으로 옮겨 담는다(좌표는 부르는 쪽에서 그 쪽 기준으로 다시 계산) */
+    function moveToPage(targetEl) {
+      var target = targetEl._page || pageById(targetEl.dataset.pageId);
+      var layer = targetEl.querySelector('.objects');
+      if (!target || !layer || target === curPage) return false;
+      if (!crossed) { otherSnap = undoEntry([target]); crossed = true; }   // 넘어가기 전 상태
+      var i = curPage.objects.indexOf(obj);
+      if (i >= 0) curPage.objects.splice(i, 1);
+      target.objects.push(obj);
+      layer.appendChild(wrapEl);        // 손가락 밑에 있던 그 요소를 그대로 넘긴다
+      setDragPage(targetEl);
+      curPage = target;
+      state.activePageId = target.id;
+      state.selected = { pageId: target.id, objId: obj.id };
+      updateActiveSlot();
+      $$('#spread .obj.selected').forEach(function (o) { o.classList.remove('selected'); });
+      wrapEl.classList.add('selected');
+      hideHint(targetEl);
+      return true;
+    }
+
+    /* 지금 놓는다면 사진 중심이 어느 쪽에 있는지 */
+    function pageAtCenter() {
+      var r = curPageEl.getBoundingClientRect();
+      var cx = r.left + (obj.x + obj.w / 2) / PW * r.width;
+      var cy = r.top + (obj.y + objHeight(obj) / 2) / PH * r.height;
+      return pageElAtPoint(cx, cy);
+    }
+
     function move(ev) {
-      if (ev.pointerId !== e.pointerId) return;
+      if (ev.pointerId !== pid) return;
       var dx = ev.clientX - sx, dy = ev.clientY - sy;
       if (!moved) {
         if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;   // 눌렀다 뗀 것은 그냥 선택
         moved = true;
-        if (!snapshotted) { pushUndo(page); snapshotted = true; }
+        originSnap = undoEntry([originPage]);    // 끌기 전 상태
+        curPageEl.classList.add('obj-dragging');
       }
-      obj.x = ox + dx * unitX;
-      obj.y = oy + dy * unitY;
-      moveClamp(obj);
-      wrapEl.style.left = (obj.x / PW * 100) + '%';
-      wrapEl.style.top = (obj.y / PH * 100) + '%';
+      var r = curPageEl.getBoundingClientRect();
+      var ux = PW / r.width, uy = PH / r.height;
+      var nx = (ev.clientX - r.left) * ux - grabX;
+      var ny = (ev.clientY - r.top) * uy - grabY;
+      obj.x = nx; obj.y = ny;
+
+      // 사진 중심이 반대쪽 종이로 넘어가면 그 쪽으로 옮긴다(그 쪽이 있을 때만)
+      var targetEl = pageAtCenter();
+      if (targetEl && targetEl !== curPageEl) {
+        if (moveToPage(targetEl)) {
+          r = curPageEl.getBoundingClientRect();
+          obj.x = (ev.clientX - r.left) * PW / r.width - grabX;
+          obj.y = (ev.clientY - r.top) * PH / r.height - grabY;
+        }
+      }
+      place();
       if (ev.cancelable) ev.preventDefault();
     }
+
     function finish(ev) {
-      if (ev && ev.pointerId != null && ev.pointerId !== e.pointerId) return;
+      if (ev && ev.pointerId != null && ev.pointerId !== pid) return;
       window.removeEventListener('pointermove', move, true);
       window.removeEventListener('pointerup', finish, true);
       window.removeEventListener('pointercancel', finish, true);
-      wrapEl.removeEventListener('lostpointercapture', finish);
+      capEl.removeEventListener('lostpointercapture', finish);
       wrapEl.classList.remove('moving');
-      try { wrapEl.releasePointerCapture(e.pointerId); } catch (err) {}
-      if (moved) markDirty();   // 앱의 자동 저장 경로(420ms 뒤 IndexedDB)
+      curPageEl.classList.remove('obj-dragging');
+      try { capEl.releasePointerCapture(pid); } catch (err) {}
+
+      if (!moved) return;    // 눌렀다 뗀 것 — 선택만
+
+      // 놓는 순간의 사진 중심으로 마지막 쪽을 정한다
+      var targetEl = pageAtCenter();
+      if (targetEl && targetEl !== curPageEl) {
+        moveToPage(targetEl);
+        var r2 = curPageEl.getBoundingClientRect();
+        if (ev && ev.clientX != null) {
+          obj.x = (ev.clientX - r2.left) * PW / r2.width - grabX;
+          obj.y = (ev.clientY - r2.top) * PH / r2.height - grabY;
+        }
+      }
+      moveClamp(obj);       // 쪽 밖으로 완전히 사라지지 않게(사진 56px)
+      place();
+
+      // 되돌리기 — 쪽을 건너갔으면 두 쪽을 함께 담아 한 번에 되돌아가게
+      if (crossed && otherSnap) {
+        var both = JSON.parse(originSnap).states.concat(JSON.parse(otherSnap).states);
+        pushUndoState(curPage, JSON.stringify({ states: both }));
+      } else if (originSnap) {
+        pushUndoState(curPage, originSnap);
+      }
+
+      // 넘어간 쪽·처음 쪽을 다시 그리고 빈 쪽 안내문도 맞춘다
+      rerenderPage(curPage);
+      if (originPage !== curPage) rerenderPage(originPage);
+      updateActiveSlot();
+      updateUndoButtons();
+      markDirty();          // 앱의 자동 저장 경로(420ms 뒤 IndexedDB)
     }
     // 포인터를 종이 밖으로 끌어도 놓치지 않게 창에서 받는다(포인터 캡처가 안 되는 웹뷰 대비)
     window.addEventListener('pointermove', move, true);
     window.addEventListener('pointerup', finish, true);
     window.addEventListener('pointercancel', finish, true);
-    wrapEl.addEventListener('lostpointercapture', finish);
+    capEl.addEventListener('lostpointercapture', finish);
   }
 
   function bindSizeHandle(pageEl, page, obj, wrapEl, handle) {
@@ -3124,7 +3284,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '15';
+  var APP_VERSION = '16';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)

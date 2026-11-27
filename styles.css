@@ -477,6 +477,9 @@ body {
 
 .page .bg { position: absolute; inset: 0; pointer-events: none; }
 
+/* 사진·객체를 끌어 옮기는 동안 — 종이 경계에 막혀 잘리지 않고 두 쪽 사이를 넘나들 수 있게 (v16) */
+.page.obj-dragging { overflow: visible; z-index: 25; }
+
 .page.lined .bg {
   background-image: repeating-linear-gradient(
     to bottom,
