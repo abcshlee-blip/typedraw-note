@@ -44,8 +44,9 @@
     { id: 'gaegu', name: '개구', css: "'Gaegu', 'Nanum Pen Script', cursive" },
     { id: 'gowun', name: '고운', css: "'Gowun Dodum', 'Noto Sans KR', sans-serif" }
   ];
-  var PEN_COLORS = ['#2b2b2b', '#1f4e9c', '#a8322a', '#2f6b3f', '#7a4fb0', '#c2761b'];
-  /* 타이핑 글씨 색 — 펜 색과 같은 톤에 또렷한 파랑·빨강을 더한다 */
+  /* 펜 색 — 차분한 톤 옆에 또렷한 파랑·빨강을 나란히 둔다 */
+  var PEN_COLORS = ['#2b2b2b', '#1f4e9c', '#2563eb', '#a8322a', '#e03131', '#2f6b3f', '#7a4fb0', '#c2761b'];
+  /* 타이핑 글씨 색 — 펜 색과 같은 여덟 가지(다크 종이는 흰색 추가) */
   var TEXT_COLORS = ['#2b2b2b', '#1f4e9c', '#2563eb', '#a8322a', '#e03131', '#2f6b3f', '#7a4fb0', '#c2761b'];
   var HL_COLORS = ['#ffe36e', '#b7f0a8', '#ffc2d1', '#bfe3ff', '#ffd0a3'];
   var TEXT_SIZES = [24, 32, 42, 54];
@@ -3078,7 +3079,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '13';
+  var APP_VERSION = '14';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)
