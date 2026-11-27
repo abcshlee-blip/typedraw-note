@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Nanum+Myeongjo:wght@400;700&family=Nanum+Pen+Script&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css?v=10" />
+<link rel="stylesheet" href="styles.css?v=11" />
 </head>
 <body>
 
@@ -72,7 +72,7 @@
       </button>
     </div>
     <footer class="shelf-foot">
-      <span class="shelf-hint">기기에 자동 저장 · 오프라인에서도 열립니다<span id="appVer" class="app-version">· v10</span></span>
+      <span class="shelf-hint">기기에 자동 저장 · 오프라인에서도 열립니다<span id="appVer" class="app-version">· v11</span></span>
       <button id="btnImportTop" class="link-btn" type="button">백업 불러오기</button>
     </footer>
   </section>
@@ -122,6 +122,10 @@
         <button class="tool" data-tool="eraser" type="button" aria-label="지우개">
           <svg class="ico"><use href="#i-eraser"/></svg><span>지우개</span>
         </button>
+        <button id="btnStyle" class="tool style-btn" type="button" aria-label="색·굵기" aria-haspopup="dialog" aria-expanded="false" title="색·굵기">
+          <span class="style-prev"><span class="style-dot"></span></span>
+          <span class="style-cap">색</span>
+        </button>
         <span class="tool-sep" aria-hidden="true"></span>
         <button id="btnInsert" class="tool" type="button" aria-label="삽입">
           <svg class="ico"><use href="#i-plus"/></svg><span>삽입</span>
@@ -153,6 +157,7 @@
           <button type="button" data-view="two" aria-pressed="false" title="두 쪽 나란히">2쪽</button>
           <button type="button" data-view="one" aria-pressed="false" title="한 쪽만">1쪽</button>
         </div>
+        <button id="btnViewCycle" class="view-cycle" type="button" aria-label="보기 방식 바꾸기" title="보기 방식 바꾸기">2쪽</button>
       </div>
     </div>
 
@@ -182,6 +187,9 @@
   <hr />
   <button type="button" data-more="delete" class="danger"><svg class="ico"><use href="#i-trash"/></svg>노트 삭제</button>
 </div>
+
+<!-- 색·굵기 팝오버(넓은 화면에서 하단 바를 한 줄로 쓰기 위해) -->
+<div id="stylePopover" class="style-popover" role="dialog" aria-label="색·굵기" hidden></div>
 
 <!-- 표지 ⋯ 메뉴 -->
 <div id="bookMenu" class="popover" hidden>
@@ -300,6 +308,6 @@
 
 <div id="printArea"></div>
 
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
