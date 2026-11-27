@@ -2274,6 +2274,7 @@
         $('#promptOk').removeEventListener('click', onOk);
         $('#promptCancel').removeEventListener('click', onCancel);
         inp.removeEventListener('keydown', onKey);
+        if (activePromptCancel === onCancel) activePromptCancel = null;
         resolve(ok ? inp.value : null);
       }
       function onOk() { done(true); }
@@ -2282,6 +2283,7 @@
       $('#promptOk').addEventListener('click', onOk);
       $('#promptCancel').addEventListener('click', onCancel);
       inp.addEventListener('keydown', onKey);
+      activePromptCancel = onCancel;
     });
   }
 
@@ -2297,12 +2299,14 @@
         if ($('#tocDrawer').hidden && $('#settingsSheet').hidden && $('#searchModal').hidden) $('#scrim').hidden = true;
         $('#confirmOk').removeEventListener('click', onOk);
         $('#confirmCancel').removeEventListener('click', onNo);
+        if (activeConfirmCancel === onNo) activeConfirmCancel = null;
         resolve(v);
       }
       function onOk() { done(true); }
       function onNo() { done(false); }
       $('#confirmOk').addEventListener('click', onOk);
       $('#confirmCancel').addEventListener('click', onNo);
+      activeConfirmCancel = onNo;
     });
   }
 
@@ -2431,11 +2435,106 @@
     stepPage(dir);
   }
 
+  /* ─────────── 뒤로가기 가드 ───────────
+     폰의 뒤로가기 버튼·제스처로 앱이 바로 닫히지 않게 한다.
+       · 열려 있는 창·메뉴(목차·검색·설정·더보기/삽입 메뉴·이름 입력·확인 대화상자)가 있으면 그것부터 닫고,
+       · 노트 편집 화면에서는 책장으로 돌아가고,
+       · 책장에서는 '종료할까요?' 확인을 띄운다.
+     history.pushState로 가짜 기록을 하나 쌓아 두어, 뒤로가기가 페이지를 벗어나기 전에 popstate로 잡는다. */
+  var nav = { guard: false, leaving: false, exitOpen: false };
+  var activePromptCancel = null;   // 열려 있는 이름 입력창을 뒤로가기로 닫을 때
+  var activeConfirmCancel = null;  // 열려 있는 확인 대화상자를 뒤로가기로 닫을 때
+
+  // 가짜 기록을 다시 쌓는다(이미 있으면 그대로)
+  function armGuard() {
+    if (nav.guard) return;
+    try {
+      history.pushState({ typedraw: 'guard' }, '');
+      nav.guard = true;
+    } catch (e) {}
+  }
+
+  function openExitConfirm() {
+    if (nav.exitOpen) return;
+    flushSave();
+    nav.exitOpen = true;
+    $('#exitModal').hidden = false;
+    var keep = $('#exitClose');
+    if (keep) setTimeout(function () { try { keep.focus(); } catch (e) {} }, 50);
+  }
+
+  function closeExitConfirm() {
+    if (!nav.exitOpen) return;
+    nav.exitOpen = false;
+    $('#exitModal').hidden = true;
+  }
+
+  // [종료] — 가드를 풀고 실제로 뒤로 빠져나간다(PWA에서는 이걸로 앱이 닫힌다)
+  function quitApp() {
+    closeExitConfirm();
+    flushSave();
+    nav.leaving = true;
+    nav.guard = false;
+    try { history.back(); } catch (e) {}
+  }
+
+  // 뒤로가기 한 번에 닫을 것이 있으면 닫는다
+  function closeTopOverlay() {
+    if (!$('#confirmModal').hidden) {
+      if (activeConfirmCancel) { activeConfirmCancel(); return true; }
+    }
+    if (!$('#promptModal').hidden) {
+      if (activePromptCancel) { activePromptCancel(); return true; }
+    }
+    if (!$('#searchModal').hidden) { closeSearch(); return true; }
+    if (!$('#settingsSheet').hidden) { closeSettings(); return true; }
+    if (!$('#tocDrawer').hidden) { closeToc(); return true; }
+    var pops = ['#insertMenu', '#moreMenu', '#bookMenu'];
+    for (var i = 0; i < pops.length; i++) {
+      var m = $(pops[i]);
+      if (m && !m.hidden) { hidePopovers(); return true; }
+    }
+    return false;
+  }
+
+  // 뒤로가기 한 번을 처리한다
+  function handleBack() {
+    if (closeTopOverlay()) return;
+    if (nav.exitOpen) { closeExitConfirm(); return; }   // 종료 확인 중이면 '계속 쓰기'와 같게
+    if (!$('#noteView').hidden) { closeNotebook(); return; }
+    openExitConfirm();
+  }
+
+  function initBackGuard() {
+    try { history.replaceState({ typedraw: 'base' }, ''); } catch (e) {}
+    armGuard();
+    window.addEventListener('popstate', function () {
+      if (nav.leaving) {
+        // [종료] 확정 — 남은 기록 한 칸을 더 물러나 앱 밖으로 나간다
+        try { history.back(); } catch (e) {}
+        return;
+      }
+      nav.guard = false;   // 방금 가짜 기록이 빠졌다
+      handleBack();
+      armGuard();          // 다음 뒤로가기도 똑같이 막아 둔다
+    });
+  }
+
   /* ─────────── 이벤트 연결 ─────────── */
   function bind() {
     $('#btnNewBook').addEventListener('click', createNotebookFlow);
     $('#btnNewBook2').addEventListener('click', createNotebookFlow);
     $('#btnBack').addEventListener('click', closeNotebook);
+
+    // 뒤로가기 종료 확인
+    $('#exitClose').addEventListener('click', function () { closeExitConfirm(); });
+    $('#exitQuit').addEventListener('click', quitApp);
+    $('#exitModal').addEventListener('click', function (e) {
+      if (e.target === $('#exitModal')) closeExitConfirm();   // 바깥을 누르면 계속 쓰기
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && nav.exitOpen) { e.preventDefault(); closeExitConfirm(); }
+    });
 
     $('#noteTitle').addEventListener('click', function () {
       promptText('노트 제목', '제목', state.nb ? state.nb.title : '').then(function (v) {
@@ -2681,6 +2780,7 @@
   function init() {
     state.viewMode = loadViewMode();
     bind();
+    initBackGuard();
     updateViewSwitch();
     registerSW();
 
