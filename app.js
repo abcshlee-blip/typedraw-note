@@ -2485,13 +2485,15 @@
     $('#exitModal').hidden = true;
   }
 
-  // [종료] — 쌓아 둔 가짜 기록을 모두 지나 실제로 앱 밖으로 나간다(PWA에서는 이걸로 앱이 닫힌다)
+  // [종료] — 쌓아 둔 가짜 기록을 모두 지나 실제로 앱 밖으로 나간다
+  // (설치 앱이면 창을 닫는 것이 가장 확실하고, 막히면 기록을 물러나 빠져나간다)
   function quitApp() {
     closeExitConfirm();
     flushSave();
     nav.leaving = true;
     nav.leaveHops = 0;
-    stepOut();
+    try { window.close(); } catch (e) {}   // 탭·보통 창에서는 막히므로 아래로 넘어간다
+    setTimeout(function () { stepOut(); }, 250);
   }
 
   // 가짜 기록을 한 칸씩 물러난다. 남은 기록이 없으면 문서가 빠져나가면서 페이지가 닫힌다.
@@ -2550,6 +2552,16 @@
     for (var i = 0; i < marks.length; i++) {
       document.addEventListener(marks[i], armGuard, { capture: true, passive: true });
     }
+
+    // 뒤로/앞으로로 이 화면이 되살아났을 때(bfcache)에는 상태를 초기화한다.
+    // ([종료]로 나가던 중이었더라도 되살아난 화면에서는 뒤로가기가 다시 동작해야 한다)
+    window.addEventListener('pageshow', function (e) {
+      if (!e.persisted) return;
+      nav.leaving = false;
+      nav.leaveHops = 0;
+      nav.depth = 0;
+      closeExitConfirm();
+    });
   }
 
   /* ─────────── 이벤트 연결 ─────────── */
