@@ -67,6 +67,7 @@
     selected: null,
     activePageId: null,
     draw: null,
+    flipping: false,     // 책장 넘김 애니메이션 중
     assets: {},          // id -> objectURL
     saveTimers: {}
   };
@@ -524,6 +525,7 @@
 
   function closeNotebook() {
     flushSave();
+    cancelFlip();
     setBarsCollapsed(false, true);
     state.nb = null;
     state.selected = null;
@@ -559,15 +561,16 @@
     if (start > nb.pages.length - 1) start = Math.max(0, nb.pages.length - 1);
     state.idx = start;
 
-    spread.classList.toggle('is-spread', state.spread && start + 1 < nb.pages.length);
+    // 두 쪽 보기에서는 쪽이 모자라도 빈 자리를 남겨 책처럼 왼쪽에 놓는다(넘길 때 자리가 흔들리지 않게)
+    spread.classList.toggle('is-spread', !!state.spread);
 
     var show = [start];
-    if (state.spread && start + 1 < nb.pages.length) show.push(start + 1);
+    if (state.spread) show.push(start + 1);
 
     show.forEach(function (pi, k) {
       var slot = el('div', 'slot ' + (show.length > 1 ? (k === 0 ? 'left' : 'right') : 'single'));
-      var pageEl = buildPageEl(nb.pages[pi], pi);
-      slot.appendChild(pageEl);
+      if (nb.pages[pi]) slot.appendChild(buildPageEl(nb.pages[pi], pi));
+      else slot.classList.add('is-blank');
       spread.appendChild(slot);
     });
 
@@ -576,7 +579,7 @@
     }
 
     layoutPages();
-    show.forEach(function (pi) { redrawInk(nb.pages[pi]); });
+    show.forEach(function (pi) { if (nb.pages[pi]) redrawInk(nb.pages[pi]); });
     updateActiveSlot();
     updatePager();
     updateUndoButtons();
@@ -630,6 +633,8 @@
     var ph = Math.floor(pw / ratio);
 
     slots.forEach(function (slot) {
+      slot.style.width = pw + 'px';
+      slot.style.flex = 'none';
       var pageEl = slot.querySelector('.page');
       if (!pageEl) return;
       pageEl.style.width = pw + 'px';
@@ -747,6 +752,8 @@
   }
 
   function onPointerDown(e) {
+    // 넘기는 중이거나 넘기기 제스처로 가져간 손가락이면 그리지 않는다
+    if (isGestureClaim(e)) { if (e.cancelable) e.preventDefault(); return; }
     var target = e.target;
     if (!target || !target.closest) return;
     if (e.button != null && e.button !== 0 && e.pointerType === 'mouse') return;
@@ -800,7 +807,7 @@
     if (s.tool === 'eraser') { ctx.fill(); } else { ctx.fill(); }
     ctx.restore();
 
-    state.draw = { pageEl: pageEl, page: page, stroke: s, ctx: ctx, lastMid: null, moved: false, pointerId: e.pointerId };
+    state.draw = { pageEl: pageEl, page: page, stroke: s, ctx: ctx, lastMid: null, moved: false, pointerId: e.pointerId, ptType: e.pointerType };
     try { pageEl.setPointerCapture(e.pointerId); } catch (err) {}
   }
 
@@ -1447,7 +1454,8 @@
     $('#btnNext').disabled = start + step > total - 1;
   }
 
-  function goPage(index) {
+  /* 화면을 곧바로 바꾸기(애니메이션 없이) */
+  function commitPage(index) {
     if (!state.nb) return;
     var total = state.nb.pages.length;
     index = clamp(index, 0, total - 1);
@@ -1460,7 +1468,29 @@
     updateUndoButtons();
   }
 
+  function goPage(index, opts) {
+    opts = opts || {};
+    if (!state.nb) return;
+    var total = state.nb.pages.length;
+    index = clamp(index, 0, total - 1);
+    if (state.spread) index = index - (index % 2);
+
+    var from = state.idx;
+    if (index === from) { commitPage(index); return; }
+
+    var dir = index > from ? 1 : -1;
+    var animate = opts.animate !== false && !state.flipping && !reduceMotion() && !$('#noteView').hidden;
+    if (animate && startFlip(dir, fromStart(from), index)) return;
+    commitPage(index);
+  }
+
+  /* 지금 보이는 펼침의 첫 쪽 */
+  function fromStart(idx) {
+    return state.spread ? idx - (idx % 2) : idx;
+  }
+
   function stepPage(dir) {
+    if (state.flipping) return;
     var step = state.spread ? 2 : 1;
     goPage(state.idx + dir * step);
   }
@@ -1475,6 +1505,205 @@
     saveNB(nb);
     goPage(insertAt);
     toast((insertAt + 1) + '쪽을 추가했어요');
+  }
+
+  /* ─────────── 책장 넘김(페이지 플립) ───────────
+     종이를 책등(가운데 접힘선)이나 종이 끝을 축으로 3D로 젖혀 넘긴다.
+     넘어가는 종이 앞면 = 지금 보이던 쪽, 뒷면 = 넘긴 뒤 왼쪽(또는 오른쪽)에 놓일 쪽. */
+  var FLIP_MS = 460;        // 젖혀지는 시간
+  var FLIP_FADE_MS = 90;    // 다 넘긴 뒤 살짝 겹쳐 사라지는 시간(그림-실제 쪽 차이를 감춤)
+  var flipToken = 0;
+
+  function reduceMotion() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+    catch (e) { return false; }
+  }
+
+  function pageElByIndex(i) {
+    var nb = state.nb;
+    if (!nb || !nb.pages[i]) return null;
+    return $('#spread .page[data-page-id="' + nb.pages[i].id + '"]');
+  }
+
+  /* 넘길 종이의 한 면: 지금 화면 모양 그대로(종이·속지·잉크·글자)를 그림으로 떠 둔다 */
+  function flipFace(page, index, w, h) {
+    var wrap = el('div', 'page flip-face-page ' + state.nb.paper.type + ' paper-' + state.nb.paper.color);
+    wrap.style.width = w + 'px';
+    wrap.style.height = h + 'px';
+    wrap.style.setProperty('--pscale', String(w / PW));
+    wrap.style.setProperty('--rule', 'calc(' + (w / PW) + ' * ' + RULE + 'px)');
+    wrap.innerHTML = '<div class="folio">' + (index + 1) + '</div>';
+    var sc = clamp((w * (window.devicePixelRatio || 1)) / PW, 0.8, 2);
+    return drawPageToCanvas(page, sc).then(function (src) {
+      var cv = document.createElement('canvas');
+      cv.className = 'ink';
+      cv.width = src.width;
+      cv.height = src.height;
+      cv.getContext('2d').drawImage(src, 0, 0);
+      wrap.insertBefore(cv, wrap.firstChild);
+      return wrap;
+    });
+  }
+
+  function startFlip(dir, fromIdx, toIdx) {
+    var nb = state.nb;
+    if (!nb || state.flipping) return false;
+    var total = nb.pages.length;
+    var spread = !!state.spread;
+    var sheetIdx, backIdx, underIdx;
+
+    if (spread) {
+      if (dir > 0) { sheetIdx = fromIdx + 1; backIdx = toIdx; underIdx = fromIdx; }
+      else { sheetIdx = fromIdx; backIdx = toIdx + 1; underIdx = fromIdx + 1; }
+    } else {
+      sheetIdx = fromIdx; backIdx = toIdx; underIdx = -1;
+    }
+    if (sheetIdx < 0 || sheetIdx >= total || backIdx < 0 || backIdx >= total) return false;
+
+    var sheetEl = pageElByIndex(sheetIdx);
+    if (!sheetEl) return false;
+    var stage = $('#stage');
+    if (!stage) return false;
+    var stageRect = stage.getBoundingClientRect();
+    var sr = sheetEl.getBoundingClientRect();
+    if (!sr.width || !sr.height) return false;
+    var underEl = underIdx >= 0 ? pageElByIndex(underIdx) : null;
+    var ur = underEl ? underEl.getBoundingClientRect() : null;
+
+    var jobs = [
+      flipFace(nb.pages[sheetIdx], sheetIdx, sr.width, sr.height),
+      flipFace(nb.pages[backIdx], backIdx, sr.width, sr.height)
+    ];
+    if (underEl && ur && ur.width) {
+      jobs.push(flipFace(nb.pages[underIdx], underIdx, ur.width, ur.height));
+    } else {
+      underIdx = -1;
+    }
+
+    state.flipping = true;
+    var token = ++flipToken;
+
+    Promise.all(jobs).then(function (faces) {
+      if (token !== flipToken || !state.nb) return;
+      buildFlipLayer(dir, faces, sr, ur, stageRect, toIdx, token);
+    }).catch(function (err) {
+      console.warn('페이지 넘김 준비 실패', err);
+      if (token === flipToken) { state.flipping = false; commitPage(toIdx); }
+    });
+    return true;
+  }
+
+  function buildFlipLayer(dir, faces, sr, ur, stageRect, toIdx, token) {
+    var offX = sr.left - stageRect.left, offY = sr.top - stageRect.top;
+    var w = sr.width, h = sr.height;
+
+    var layer = el('div', 'flip-layer');
+    var scene = el('div', 'flip-scene');
+    layer.appendChild(scene);
+
+    // 넘기기 직전에 보이던 반대쪽 종이는 그대로 두고, 넘어간 종이가 덮는다
+    if (faces[2] && ur) {
+      var under = el('div', 'flip-under');
+      under.style.left = (ur.left - stageRect.left) + 'px';
+      under.style.top = (ur.top - stageRect.top) + 'px';
+      under.style.width = ur.width + 'px';
+      under.style.height = ur.height + 'px';
+      under.appendChild(faces[2]);
+      scene.appendChild(under);
+    }
+
+    var sheet = el('div', 'flip-sheet');
+    sheet.style.left = offX + 'px';
+    sheet.style.top = offY + 'px';
+    sheet.style.width = w + 'px';
+    sheet.style.height = h + 'px';
+    sheet.style.transformOrigin = (dir > 0 ? '0% 50%' : '100% 50%');
+
+    var front = el('div', 'flip-face front');
+    front.appendChild(faces[0]);
+    var back = el('div', 'flip-face back');
+    back.appendChild(faces[1]);
+
+    // 접힘선 쪽 그늘과 넘어가는 결 하이라이트
+    var fShade = el('div', 'flip-shade');
+    fShade.style.background = dir > 0
+      ? 'linear-gradient(to right, rgba(48,32,10,0.55) 0%, rgba(48,32,10,0.10) 22%, rgba(255,255,255,0.12) 58%, rgba(255,255,255,0) 100%)'
+      : 'linear-gradient(to left, rgba(48,32,10,0.55) 0%, rgba(48,32,10,0.10) 22%, rgba(255,255,255,0.12) 58%, rgba(255,255,255,0) 100%)';
+    fShade.style.opacity = '0.25';
+    front.appendChild(fShade);
+
+    var bShade = el('div', 'flip-shade');
+    bShade.style.background = dir > 0
+      ? 'linear-gradient(to left, rgba(48,32,10,0.62) 0%, rgba(48,32,10,0.08) 26%, rgba(255,255,255,0.10) 100%)'
+      : 'linear-gradient(to right, rgba(48,32,10,0.62) 0%, rgba(48,32,10,0.08) 26%, rgba(255,255,255,0.10) 100%)';
+    bShade.style.opacity = '0.95';
+    back.appendChild(bShade);
+
+    sheet.appendChild(front);
+    sheet.appendChild(back);
+    scene.appendChild(sheet);
+    $('#stage').appendChild(layer);
+
+    // 넘어간 뒤의 펼침을 미리 그려 둔다(넘어가는 종이 밑에서 드러난다)
+    commitPage(toIdx);
+
+    var s = dir > 0 ? -1 : 1;
+    var kf = [
+      { transform: 'rotateY(0deg) translateZ(0px)', offset: 0 },
+      { transform: 'rotateY(' + (s * 13) + 'deg) translateZ(14px)', offset: 0.14 },
+      { transform: 'rotateY(' + (s * 92) + 'deg) translateZ(26px)', offset: 0.5 },
+      { transform: 'rotateY(' + (s * 167) + 'deg) translateZ(9px)', offset: 0.88 },
+      { transform: 'rotateY(' + (s * 180) + 'deg) translateZ(0px)', offset: 1 }
+    ];
+    var anim;
+    try {
+      anim = sheet.animate(kf, { duration: FLIP_MS, easing: 'cubic-bezier(.42,.02,.34,1)', fill: 'forwards' });
+      if (fShade.animate) {
+        fShade.animate([{ opacity: 0.25 }, { opacity: 0.95 }], { duration: FLIP_MS * 0.5, easing: 'ease-in', fill: 'forwards' });
+        bShade.animate([{ opacity: 0.95 }, { opacity: 0.28 }], { duration: FLIP_MS, easing: 'ease-out', fill: 'forwards' });
+      }
+    } catch (e) {
+      commitPageDone(token, layer);
+      return;
+    }
+
+    var done = false;
+    function cleanup() {
+      if (done) return;
+      done = true;
+      if (layer.parentNode) layer.parentNode.removeChild(layer);
+      if (token === flipToken) state.flipping = false;
+    }
+
+    function settle() {
+      if (done) return;
+      // 덮고 있던 옛 종이를 치우면 밑에 미리 그려 둔 새 쪽이 드러난다
+      var u = layer.querySelector('.flip-under');
+      if (u && u.parentNode) u.parentNode.removeChild(u);
+      try {
+        sheet.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FLIP_FADE_MS, easing: 'ease-out', fill: 'forwards' });
+      } catch (e) {}
+      setTimeout(cleanup, FLIP_FADE_MS + 20);
+    }
+
+    if (anim && anim.finished && anim.finished.then) {
+      anim.finished.then(function () { if (token === flipToken) settle(); }).catch(function () {});
+    }
+    setTimeout(function () { if (token === flipToken) settle(); }, FLIP_MS + 90);
+    setTimeout(cleanup, FLIP_MS + FLIP_FADE_MS + 700);
+  }
+
+  function commitPageDone(token, layer) {
+    if (layer && layer.parentNode) layer.parentNode.removeChild(layer);
+    if (token === flipToken) state.flipping = false;
+  }
+
+  function cancelFlip() {
+    flipToken++;
+    state.flipping = false;
+    var stage = $('#stage');
+    if (!stage) return;
+    $$('.flip-layer', stage).forEach(function (n) { n.parentNode.removeChild(n); });
   }
 
   /* ─────────── 목차 ─────────── */
@@ -2074,6 +2303,131 @@
     });
   }
 
+  /* ─────────── 손으로 책장 넘기기(스와이프) ───────────
+     필기와 부딪치지 않게 이럴 때만 넘긴다.
+       · 두 손가락을 좌우로 밀 때(어떤 도구든)
+       · 종이 바깥 좌우 여백에서 안쪽으로 밀 때(어떤 도구든)
+       · 종이 바깥 모서리 32px 안쪽에서 안쪽으로 밀 때(팬 제외)
+       · 선택 도구일 때 종이 위에서 좌우로 밀 때
+     그 밖에 한 손가락·S팬으로 종이 안쪽에 그을 때는 절대 넘기지 않는다. */
+  var EDGE_PX = 32;     // 종이 바깥 모서리에서 이만큼 안쪽
+  var SWIPE_PX = 36;    // 가로로 이만큼 밀면 넘김
+  var gx = {
+    pts: {},            // pointerId -> {x, y, type}
+    one: null,          // 한 손가락 후보
+    two: null,          // 두 손가락
+    claim: {}           // 넘김 제스처가 가져간 pointerId
+  };
+
+  function isGestureClaim(e) {
+    return !!state.flipping || !!gx.claim[e.pointerId];
+  }
+
+  function outerEdgeSide(pageEl) {
+    var slot = pageEl.closest ? pageEl.closest('.slot') : null;
+    if (!slot) return null;
+    if (slot.classList.contains('left')) return 'left';
+    if (slot.classList.contains('right')) return 'right';
+    return 'both';
+  }
+
+  function abortStrokeIfTouch() {
+    var d = state.draw;
+    if (!d || d.ptType !== 'touch') return;
+    state.draw = null;
+    try { d.pageEl.releasePointerCapture(d.pointerId); } catch (e) {}
+    redrawInk(d.page);   // 그리다 만 선은 그리고, 되돌리기 기록 전이므로 버린다
+  }
+
+  function gestureDown(e) {
+    if ($('#noteView').hidden) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    gx.pts[e.pointerId] = { x: e.clientX, y: e.clientY, type: e.pointerType };
+    if (state.flipping) return;
+
+    var t = e.target;
+    var inObj = !!(t && t.closest && t.closest('.obj'));
+
+    // 두 손가락 좌우 밀기
+    if (e.pointerType !== 'mouse') {
+      var touchIds = [];
+      for (var k in gx.pts) if (gx.pts[k].type !== 'mouse') touchIds.push(k);
+      if (touchIds.length >= 2) {
+        abortStrokeIfTouch();
+        var a = gx.pts[touchIds[0]], b = gx.pts[touchIds[1]];
+        gx.two = { ids: [touchIds[0], touchIds[1]], x0: (a.x + b.x) / 2, y0: (a.y + b.y) / 2, used: false };
+        gx.one = null;
+        touchIds.forEach(function (id) { gx.claim[id] = true; });
+        if (e.cancelable) e.preventDefault();
+        return;
+      }
+    }
+    if (inObj) return;   // 글자·사진을 만지거나 옮길 때는 넘기지 않는다
+
+    var pageEl = t && t.closest ? t.closest('.page') : null;
+    var zone = 'margin';
+    if (pageEl) {
+      var r = pageEl.getBoundingClientRect();
+      var side = outerEdgeSide(pageEl);
+      var nearEdge =
+        ((side === 'left' || side === 'both') && (e.clientX - r.left) <= EDGE_PX) ||
+        ((side === 'right' || side === 'both') && (r.right - e.clientX) <= EDGE_PX);
+      zone = nearEdge ? 'edge' : 'inside';
+      if (zone === 'edge' && e.pointerType === 'pen') zone = 'inside';   // 팬으로 모서리에 쓸 때는 그대로 필기
+    }
+
+    if (zone === 'margin' || zone === 'edge') {
+      gx.one = { id: e.pointerId, x0: e.clientX, y0: e.clientY, zone: zone, used: false };
+      gx.claim[e.pointerId] = true;
+      if (e.cancelable) e.preventDefault();
+    } else if (zone === 'inside' && state.tool === 'select') {
+      // 선택 도구는 그리지 않으므로 가범게 관찰만 한다(끌어서 옮기기와 부딪 치지 않게)
+      gx.one = { id: e.pointerId, x0: e.clientX, y0: e.clientY, zone: zone, used: false };
+    }
+  }
+
+  function gestureMove(e) {
+    var p = gx.pts[e.pointerId];
+    if (p) { p.x = e.clientX; p.y = e.clientY; }
+
+    if (gx.two && !gx.two.used && gx.two.ids.indexOf(e.pointerId) >= 0) {
+      var a = gx.pts[gx.two.ids[0]], b = gx.pts[gx.two.ids[1]];
+      if (!a || !b) return;
+      var dx2 = ((a.x + b.x) / 2) - gx.two.x0;
+      var dy2 = ((a.y + b.y) / 2) - gx.two.y0;
+      if (Math.abs(dx2) >= SWIPE_PX && Math.abs(dx2) > Math.abs(dy2) * 1.2) {
+        gx.two.used = true;
+        turnBySwipe(dx2 < 0 ? 1 : -1);
+      }
+      return;
+    }
+
+    var o = gx.one;
+    if (!o || o.used || o.id !== e.pointerId) return;
+    if (gx.two) return;
+    var dx = e.clientX - o.x0, dy = e.clientY - o.y0;
+    var need = o.zone === 'inside' ? SWIPE_PX * 1.2 : SWIPE_PX;
+    if (Math.abs(dx) >= need && Math.abs(dx) > Math.abs(dy) * 1.25) {
+      o.used = true;
+      turnBySwipe(dx < 0 ? 1 : -1);
+    }
+  }
+
+  function gestureUp(e) {
+    delete gx.pts[e.pointerId];
+    delete gx.claim[e.pointerId];
+    if (gx.one && gx.one.id === e.pointerId) gx.one = null;
+    if (gx.two) {
+      var left = gx.two.ids.filter(function (id) { return !!gx.pts[id]; });
+      if (left.length < 2) gx.two = null;
+    }
+  }
+
+  function turnBySwipe(dir) {
+    if (state.flipping) return;
+    stepPage(dir);
+  }
+
   /* ─────────── 이벤트 연결 ─────────── */
   function bind() {
     $('#btnNewBook').addEventListener('click', createNotebookFlow);
@@ -2225,6 +2579,13 @@
     spread.addEventListener('pointerup', onPointerUp);
     spread.addEventListener('pointercancel', onPointerUp);
 
+    // 책장 넘기기 제스처(필기보다 먼저 판단한다)
+    var stageEl = $('#stage');
+    stageEl.addEventListener('pointerdown', gestureDown, true);
+    stageEl.addEventListener('pointermove', gestureMove, true);
+    stageEl.addEventListener('pointerup', gestureUp, true);
+    stageEl.addEventListener('pointercancel', gestureUp, true);
+
     // 키보드
     document.addEventListener('keydown', function (e) {
       var t = e.target;
@@ -2269,12 +2630,12 @@
 
     // 바 높이가 바뀌면(도구 옵션 줄이 생기고 사라질 때, 글꼴이 늦게 실릴 때) 종이 크기를 다시 맞춘다
     if (typeof ResizeObserver === 'function') {
-      var stageEl = $('#stage');
-      if (stageEl) {
+      var stageBox = $('#stage');
+      if (stageBox) {
         new ResizeObserver(function () {
           if ($('#noteView').hidden) return;
           layoutPages();
-        }).observe(stageEl);
+        }).observe(stageBox);
       }
     }
 
