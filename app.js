@@ -48,12 +48,17 @@
   var HL_COLORS = ['#ffe36e', '#b7f0a8', '#ffc2d1', '#bfe3ff', '#ffd0a3'];
   var TEXT_SIZES = [24, 32, 42, 54];
 
+  /* 2쪽 펼침 기준: 이 너비 이상이면 두 쪽을 나란히 (폴드 펼친 화면 포함) */
+  var VIEW_MIN = 540;
+  var VIEW_KEY = 'tdn.viewMode';
+
   /* ─────────── 상태 ─────────── */
   var state = {
     notebooks: [],
     nb: null,
     idx: 0,
-    spread: window.innerWidth >= 768,
+    spread: false,
+    viewMode: 'auto',
     tool: 'pen',
     pen: { color: '#2b2b2b', width: 3.5 },
     hl: { color: '#ffe36e', width: 20 },
@@ -103,6 +108,54 @@
     return '#fbf6e9';
   }
   function isDarkPaper() { return state.nb && state.nb.paper && state.nb.paper.color === 'dark'; }
+
+  /* ─────────── 보기 방식 (자동 / 2쪽 / 1쪽) ─────────── */
+  function loadViewMode() {
+    try {
+      var m = localStorage.getItem(VIEW_KEY);
+      if (m === 'two' || m === 'one' || m === 'auto') return m;
+    } catch (e) {}
+    return 'auto';
+  }
+  function storeViewMode(m) {
+    try { localStorage.setItem(VIEW_KEY, m); } catch (e) {}
+  }
+  function availWidth() {
+    return Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0);
+  }
+  function wantSpread() {
+    if (state.viewMode === 'two') return true;
+    if (state.viewMode === 'one') return false;
+    return availWidth() >= VIEW_MIN;
+  }
+  function updateViewSwitch() {
+    var box = $('#viewSwitch');
+    if (!box) return;
+    $$('button', box).forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.view === state.viewMode ? 'true' : 'false');
+    });
+  }
+  function setViewMode(mode) {
+    if (mode !== 'two' && mode !== 'one' && mode !== 'auto') mode = 'auto';
+    if (mode === state.viewMode) { updateViewSwitch(); return; }
+    state.viewMode = mode;
+    storeViewMode(mode);
+    updateViewSwitch();
+    if (!$('#noteView').hidden && state.nb) {
+      // 지금 보고 있던 쪽을 그대로 유지한다
+      var cur = -1;
+      if (state.activePageId) {
+        for (var i = 0; i < state.nb.pages.length; i++) {
+          if (state.nb.pages[i].id === state.activePageId) { cur = i; break; }
+        }
+      }
+      if (cur >= 0) state.idx = cur;
+      renderSpread();
+      renderOptions();
+      updateUndoButtons();
+    }
+    toast(mode === 'two' ? '두 쪽 보기로 바꿨습니다' : mode === 'one' ? '한 쪽 보기로 바꿨습니다' : (wantSpread() ? '자동 — 두 쪽 보기' : '자동 — 한 쪽 보기'));
+  }
 
   var WEEK = ['일', '월', '화', '수', '목', '금', '토'];
   function fmtDateLong(d) {
@@ -416,7 +469,7 @@
     spread.innerHTML = '';
     if (!nb || !nb.pages.length) return;
 
-    state.spread = window.innerWidth >= 768;
+    state.spread = wantSpread();
     var start = state.spread ? state.idx - (state.idx % 2) : state.idx;
     if (start > nb.pages.length - 1) start = Math.max(0, nb.pages.length - 1);
     state.idx = start;
@@ -442,6 +495,7 @@
     updateActiveSlot();
     updatePager();
     updateUndoButtons();
+    updateViewSwitch();
   }
 
   function buildPageEl(page, index) {
@@ -1962,6 +2016,12 @@
     $('#btnAddPage').addEventListener('click', addPage);
     $('#pageLabel').addEventListener('click', openToc);
 
+    $('#viewSwitch').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-view]');
+      if (!b) return;
+      setViewMode(b.dataset.view);
+    });
+
     $('#btnInsert').addEventListener('click', function () {
       var menu = $('#insertMenu');
       if (!menu.hidden) { hidePopovers(); return; }
@@ -2101,7 +2161,7 @@
     window.addEventListener('resize', debounce(function () {
       if ($('#noteView').hidden) return;
       var wasSpread = state.spread;
-      var nowSpread = window.innerWidth >= 768;
+      var nowSpread = wantSpread();
       if (wasSpread !== nowSpread) {
         renderSpread();
       } else {
@@ -2154,7 +2214,9 @@
   }
 
   function init() {
+    state.viewMode = loadViewMode();
     bind();
+    updateViewSwitch();
     registerSW();
 
     dbAll('notebooks').then(function (rows) {

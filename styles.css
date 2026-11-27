@@ -657,8 +657,46 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   padding: 2px 0 1px;
+}
+.pager-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ── 보기 방식 (자동 / 2쪽 / 1쪽) ── */
+.view-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(140, 120, 90, 0.35);
+  flex: none;
+}
+.view-switch button {
+  height: 22px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: #6a5f4c;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.view-switch button[aria-pressed="true"] {
+  background: #fffaf0;
+  color: var(--accent);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16), inset 0 0 0 1px rgba(140, 74, 63, 0.28);
 }
 .page-btn {
   width: 34px; height: 30px;

@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Nanum+Myeongjo:wght@400;700&family=Nanum+Pen+Script&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="styles.css?v=2" />
 </head>
 <body>
 
@@ -131,16 +131,23 @@
       </div>
       <div id="optRow" class="opt-row"></div>
       <div class="pager">
-        <button id="btnPrev" class="page-btn" type="button" aria-label="이전 페이지">
-          <svg class="ico"><use href="#i-left"/></svg>
-        </button>
-        <button id="pageLabel" class="page-label" type="button">1 / 2</button>
-        <button id="btnNext" class="page-btn" type="button" aria-label="다음 페이지">
-          <svg class="ico"><use href="#i-right"/></svg>
-        </button>
-        <button id="btnAddPage" class="page-add" type="button">
-          <svg class="ico"><use href="#i-plus"/></svg><span>쪽</span>
-        </button>
+        <div class="pager-nav">
+          <button id="btnPrev" class="page-btn" type="button" aria-label="이전 페이지">
+            <svg class="ico"><use href="#i-left"/></svg>
+          </button>
+          <button id="pageLabel" class="page-label" type="button">1 / 2</button>
+          <button id="btnNext" class="page-btn" type="button" aria-label="다음 페이지">
+            <svg class="ico"><use href="#i-right"/></svg>
+          </button>
+          <button id="btnAddPage" class="page-add" type="button">
+            <svg class="ico"><use href="#i-plus"/></svg><span>쪽</span>
+          </button>
+        </div>
+        <div id="viewSwitch" class="view-switch" role="group" aria-label="보기 방식">
+          <button type="button" data-view="auto" aria-pressed="true" title="화면 크기에 맞춰 자동">자동</button>
+          <button type="button" data-view="two" aria-pressed="false" title="두 쪽 나란히">2쪽</button>
+          <button type="button" data-view="one" aria-pressed="false" title="한 쪽만">1쪽</button>
+        </div>
       </div>
     </div>
   </section>
@@ -272,6 +279,6 @@
 
 <div id="printArea"></div>
 
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
