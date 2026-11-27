@@ -385,6 +385,7 @@ body {
 .note-view.bars-collapsed .bars-restore:active { opacity: 1; background: rgba(251, 246, 233, 0.9); }
 
 .stage {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -392,6 +393,7 @@ body {
   justify-content: center;
   padding: 4px 6px;
   overflow: hidden;
+  touch-action: none;
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -405,6 +407,43 @@ body {
 }
 
 .slot { display: flex; align-items: center; justify-content: center; }
+
+/* ── 책장 넘김(페이지 플립) ── */
+.flip-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  overflow: hidden;
+  pointer-events: auto;
+  touch-action: none;
+}
+.flip-scene {
+  position: absolute;
+  inset: 0;
+  perspective: 2200px;
+  perspective-origin: 50% 50%;
+}
+.flip-under,
+.flip-sheet { position: absolute; }
+.flip-under { z-index: 1; }
+.flip-sheet {
+  z-index: 2;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.flip-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--paper, #fbf6e9);
+  box-shadow: 0 18px 44px -20px rgba(48, 30, 10, 0.6);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-face.back { transform: rotateY(180deg); }
+.flip-face .page { box-shadow: none; border-radius: 3px; }
+.flip-shade { position: absolute; inset: 0; pointer-events: none; }
 
 /* ── 종이 한 쪽 ── */
 .page {
