@@ -1026,14 +1026,24 @@
       img.alt = '';
       img.draggable = false;
       wrap.appendChild(img);
-      wrap.appendChild(el('div', 'size-handle'));
       var sh2 = el('div', 'size-handle');
       wrap.appendChild(sh2);
       bindSizeHandle(pageEl, page, obj, wrap, sh2);
-      img.addEventListener('pointerdown', function (e) {
+
+      /* 사진 끌어 옮기기 (v15)
+         · 마우스 왼쪽 버튼은 어느 도구(펜·형광펜·지우개·타이핑·선택)에서나 사진 위에서 바로 끌면 옮겨진다.
+         · S펜·손가락으로 펜/형광펜을 쓸 때는 사진 위에 그대로 필기되도록 이벤트를 종이로 흘려보낸다
+           (그래서 필기 도구일 때도 사진만 pointer-events를 살려 두고, 여기서 팬·터치를 통과시킨다). */
+      wrap.addEventListener('pointerdown', function (e) {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;   // 오른쪽·가운데 버튼은 그대로
+        if (isDrawTool() && e.pointerType !== 'mouse') return;      // 팬·손가락 필기는 종이로 넘긴다
+        var t = e.target;
+        if (t && t.closest && (t.closest('.handle-bar') || t.closest('.size-handle'))) return;
+        e.preventDefault();
         e.stopPropagation();
         setActivePage(pageEl);
         selectObject(pageEl, wrap);
+        startMove(e, obj, page, pageEl, wrap);
       });
     }
     return wrap;
@@ -1070,29 +1080,60 @@
     return bar;
   }
 
+  /* 옮긴 자리 보정 — 사진이 쪽 밖으로 완전히 사라지지 않게 최소 56px은 종이 위에 남긴다 */
+  function moveClamp(obj) {
+    if (obj.type === 'image') {
+      var h = obj.h || obj.w * 0.72;
+      obj.x = clamp(obj.x, -obj.w + 56, PW - 56);
+      obj.y = clamp(obj.y, -h + 56, PH - 56);
+    } else {
+      obj.x = clamp(obj.x, 0, PW - 40);
+      obj.y = clamp(obj.y, 0, PH - 20);
+    }
+  }
+
+  /* 끌어서 옮기기 — 마우스 왼쪽·S펜·손가락이 같은 경로를 쓴다.
+     실제로 움직이기 시작할 때만 되돌리기 기록을 남기고, 놓으면 자동 저장한다. */
   function startMove(e, obj, page, pageEl, wrapEl) {
-    pushUndo(page);
     var r = pageEl.getBoundingClientRect();
     var sx = e.clientX, sy = e.clientY;
     var ox = obj.x, oy = obj.y;
     var unitX = PW / r.width, unitY = PH / r.height;
+    var moved = false, snapshotted = false;
+
     try { wrapEl.setPointerCapture(e.pointerId); } catch (err) {}
+    wrapEl.classList.add('moving');
 
     function move(ev) {
-      obj.x = clamp(ox + (ev.clientX - sx) * unitX, 0, PW - 40);
-      obj.y = clamp(oy + (ev.clientY - sy) * unitY, 0, PH - 20);
+      if (ev.pointerId !== e.pointerId) return;
+      var dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (!moved) {
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;   // 눌렀다 뗀 것은 그냥 선택
+        moved = true;
+        if (!snapshotted) { pushUndo(page); snapshotted = true; }
+      }
+      obj.x = ox + dx * unitX;
+      obj.y = oy + dy * unitY;
+      moveClamp(obj);
       wrapEl.style.left = (obj.x / PW * 100) + '%';
       wrapEl.style.top = (obj.y / PH * 100) + '%';
+      if (ev.cancelable) ev.preventDefault();
     }
-    function up() {
-      wrapEl.removeEventListener('pointermove', move);
-      wrapEl.removeEventListener('pointerup', up);
-      wrapEl.removeEventListener('pointercancel', up);
-      markDirty();
+    function finish(ev) {
+      if (ev && ev.pointerId != null && ev.pointerId !== e.pointerId) return;
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', finish, true);
+      window.removeEventListener('pointercancel', finish, true);
+      wrapEl.removeEventListener('lostpointercapture', finish);
+      wrapEl.classList.remove('moving');
+      try { wrapEl.releasePointerCapture(e.pointerId); } catch (err) {}
+      if (moved) markDirty();   // 앱의 자동 저장 경로(420ms 뒤 IndexedDB)
     }
-    wrapEl.addEventListener('pointermove', move);
-    wrapEl.addEventListener('pointerup', up);
-    wrapEl.addEventListener('pointercancel', up);
+    // 포인터를 종이 밖으로 끌어도 놓치지 않게 창에서 받는다(포인터 캡처가 안 되는 웹뷰 대비)
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', finish, true);
+    window.addEventListener('pointercancel', finish, true);
+    wrapEl.addEventListener('lostpointercapture', finish);
   }
 
   function bindSizeHandle(pageEl, page, obj, wrapEl, handle) {
@@ -1234,6 +1275,10 @@
           };
           offset += 24;
           addObjectToActive(obj);
+          // 방금 넣은 사진을 골라 둔다 — 손잡이가 보이고 바로 끌어 옮길 수 있게
+          var pe = activePageEl();
+          var oe = pe && pe.querySelector('.obj[data-obj-id="' + obj.id + '"]');
+          if (pe && oe) selectObject(pe, oe);
         });
       }).catch(function (err) { console.warn(err); toast('사진을 넣지 못했어요'); });
     });
@@ -3079,7 +3124,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '14';
+  var APP_VERSION = '15';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)
