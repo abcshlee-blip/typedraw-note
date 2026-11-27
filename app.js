@@ -2819,7 +2819,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '9';
+  var APP_VERSION = '10';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)

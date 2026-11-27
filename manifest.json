@@ -1,6 +1,6 @@
 {
-  "name": "TypeDraw 노트",
-  "short_name": "TypeDraw",
+  "name": "노트",
+  "short_name": "노트",
   "description": "종이 노트 감성의 타이핑 + 손그림 노트. 기기에 자동 저장되고 오프라인에서도 열립니다.",
   "lang": "ko",
   "dir": "ltr",

@@ -1,10 +1,10 @@
 /* TypeDraw 노트 — 오프라인 우선 Service Worker */
-const CACHE = 'typedraw-note-v9';
+const CACHE = 'typedraw-note-v10';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=9',
-  './app.js?v=9',
+  './styles.css?v=10',
+  './app.js?v=10',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
