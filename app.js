@@ -157,6 +157,81 @@
     toast(mode === 'two' ? '두 쪽 보기로 바꿨습니다' : mode === 'one' ? '한 쪽 보기로 바꿨습니다' : (wantSpread() ? '자동 — 두 쪽 보기' : '자동 — 한 쪽 보기'));
   }
 
+  /* ─────────── 상·하단 바 접기 (전체 화면 몰입 보기) ─────────── */
+  var BARS_MS = 300;
+  var barsRaf = null;
+
+  function barsCollapsed() {
+    var v = $('#noteView');
+    return !!(v && !v.hidden && v.classList.contains('bars-collapsed'));
+  }
+
+  function setBarsCollapsed(collapsed, silent) {
+    var view = $('#noteView');
+    if (!view) return;
+    var head = view.querySelector('.note-head');
+    var bar = view.querySelector('.toolbar');
+    if (!head || !bar) return;
+
+    var now = view.classList.contains('bars-collapsed');
+    if (collapsed === now && !silent) return;
+    if (barsRaf) { cancelAnimationFrame(barsRaf); barsRaf = null; }
+
+    // 1) 두 바의 자연 높이를 잰다 (같은 프레임 안에서만 잠깐 되돌려 본다)
+    head.classList.remove('bar-anim');
+    bar.classList.remove('bar-anim');
+    head.style.height = '';
+    bar.style.height = '';
+    head.style.overflow = '';
+    bar.style.overflow = '';
+    if (now) view.classList.remove('bars-collapsed');
+    var hh = head.offsetHeight;
+    var bh = bar.offsetHeight;
+    if (now) { view.classList.add('bars-collapsed'); void head.offsetHeight; }
+
+    if (silent) {
+      view.classList.toggle('bars-collapsed', !!collapsed);
+      layoutPages();
+      return;
+    }
+
+    // 2) 애니메이션 준비
+    head.style.overflow = 'hidden';
+    bar.style.overflow = 'hidden';
+    head.classList.add('bar-anim');
+    bar.classList.add('bar-anim');
+
+    if (collapsed) {
+      head.style.height = hh + 'px';
+      bar.style.height = bh + 'px';
+      void head.offsetHeight;
+      view.classList.add('bars-collapsed');
+    } else {
+      head.style.height = '0px';
+      bar.style.height = '0px';
+      void head.offsetHeight;
+      view.classList.remove('bars-collapsed');
+      head.style.height = hh + 'px';
+      bar.style.height = bh + 'px';
+    }
+
+    // 3) 바가 움직이는 동안 종이 크기를 계속 다시 맞춘다
+    var t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    function step(t) {
+      layoutPages();
+      if (t - t0 < BARS_MS + 60) { barsRaf = requestAnimationFrame(step); return; }
+      barsRaf = null;
+      head.classList.remove('bar-anim');
+      bar.classList.remove('bar-anim');
+      head.style.height = '';
+      bar.style.height = '';
+      head.style.overflow = '';
+      bar.style.overflow = '';
+      layoutPages();
+    }
+    barsRaf = requestAnimationFrame(step);
+  }
+
   var WEEK = ['일', '월', '화', '수', '목', '금', '토'];
   function fmtDateLong(d) {
     d = d || new Date();
@@ -440,6 +515,7 @@
 
   function closeNotebook() {
     flushSave();
+    setBarsCollapsed(false, true);
     state.nb = null;
     state.selected = null;
     $('#noteView').hidden = true;
@@ -2104,6 +2180,10 @@
     $('#btnSearch').addEventListener('click', openSearch);
     $('#searchInput').addEventListener('input', debounce(function (e) { runSearch(e.target.value); }, 120));
 
+    // 상·하단 바 접기 / 펴기
+    $('#btnBarsCollapse').addEventListener('click', function () { hidePopovers(); setBarsCollapsed(true); });
+    $('#btnBarsExpand').addEventListener('click', function () { setBarsCollapsed(false); });
+
     $$('[data-close-sheet]').forEach(function (b) { b.addEventListener('click', closeSettings); });
     $$('[data-close-drawer]').forEach(function (b) { b.addEventListener('click', closeToc); });
     $$('[data-close-search]').forEach(function (b) { b.addEventListener('click', closeSearch); });
@@ -2147,6 +2227,7 @@
         return;
       }
       if (typing || $('#noteView').hidden) return;
+      if (e.key === 'Escape' && barsCollapsed()) { setBarsCollapsed(false); return; }
       var k = e.key.toLowerCase();
       if (k === 'v') setTool('select');
       else if (k === 't') setTool('text');
