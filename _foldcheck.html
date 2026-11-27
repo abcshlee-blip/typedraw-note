@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>fold check</title>
+<style>html,body{margin:0;background:#6f6a62}#f{display:block;border:0;margin:0 auto}</style></head>
+<body><iframe id="f" src="index.html"></iframe>
+<script>
+var p=new URLSearchParams(location.search),f=document.getElementById('f');
+f.width=parseInt(p.get('w')||'680',10); f.height=parseInt(p.get('h')||'860',10);
+f.addEventListener('load',function(){setTimeout(function(){var b=f.contentDocument.querySelector('.book');if(b)b.click();},500);});
+window.__m=function(){var d=f.contentDocument,w=f.contentWindow;var pages=[].slice.call(d.querySelectorAll('#spread .page')).map(function(pg){var r=pg.getBoundingClientRect();return{x:+r.x.toFixed(1),y:+r.y.toFixed(1),w:+r.width.toFixed(1),h:+r.height.toFixed(1),right:+r.right.toFixed(1),bottom:+r.bottom.toFixed(1)};});
+var pager=d.querySelector('.pager').getBoundingClientRect(),sw=d.querySelector('#viewSwitch').getBoundingClientRect(),st=d.querySelector('#stage').getBoundingClientRect();
+return{iw:w.innerWidth,ih:w.innerHeight,spread:d.querySelector('#spread').classList.contains('is-spread'),pages:pages,
+label:d.querySelector('#pageLabel').textContent,sub:d.querySelector('#noteSub').textContent,
+pager:{x:+pager.x.toFixed(1),y:+pager.y.toFixed(1),w:+pager.width.toFixed(1),h:+pager.height.toFixed(1)},
+sw:{x:+sw.x.toFixed(1),y:+sw.y.toFixed(1),w:+sw.width.toFixed(1),h:+sw.height.toFixed(1)},
+stage:{w:+st.width.toFixed(1),h:+st.height.toFixed(1)},scrollW:d.documentElement.scrollWidth,scrollH:d.documentElement.scrollHeight};};
+</script></body></html>
