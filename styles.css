@@ -275,7 +275,7 @@ body {
 
 /* ═══════════ 노트 화면 ═══════════ */
 
-.note-view { background: linear-gradient(#efe7d8, #e4d8c1); }
+.note-view { background: linear-gradient(#efe7d8, #e4d8c1); position: relative; overflow: hidden; }
 
 .note-head {
   display: flex;
@@ -312,6 +312,78 @@ body {
 }
 .note-sub { font-size: 11px; color: #8b7f67; margin-top: 1px; }
 
+/* ── 상·하단 바 접기(전체 화면 몰입 보기) ── */
+.note-head.bar-anim,
+.toolbar.bar-anim {
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              border-top-width 0.3s ease,
+              border-bottom-width 0.3s ease,
+              opacity 0.24s ease,
+              transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.note-view.bars-collapsed .note-head,
+.note-view.bars-collapsed .toolbar {
+  height: 0 !important;
+  min-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-top-width: 0 !important;
+  border-bottom-width: 0 !important;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  will-change: height;
+}
+.note-view.bars-collapsed .note-head { transform: translateY(-6px); }
+.note-view.bars-collapsed .toolbar { transform: translateY(8px); }
+
+/* 접힌 동안 종이가 화면을 더 넓게 쓴다 */
+.note-view.bars-collapsed .stage { padding: 4px 2px; }
+
+/* 접힘 상태에서만 뜨는 작은 복귀 버튼 */
+.bars-restore {
+  position: absolute;
+  top: calc(6px + env(safe-area-inset-top));
+  right: 8px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 30px;
+  padding: 0 10px 0 6px;
+  border: 1px solid rgba(140, 120, 90, 0.4);
+  border-radius: 999px;
+  background: rgba(251, 246, 233, 0.62);
+  color: #5b5140;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 8px -3px rgba(60, 40, 20, 0.45);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-6px) scale(0.96);
+  transition: opacity 0.22s ease, transform 0.22s ease, background 0.2s ease, visibility 0s linear 0.3s;
+}
+.bars-restore .ico { width: 16px; height: 16px; }
+.note-view.bars-collapsed .bars-restore {
+  opacity: 0.8;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition: opacity 0.22s ease, transform 0.22s ease, background 0.2s ease, visibility 0s linear 0s;
+}
+.note-view.bars-collapsed .bars-restore:hover,
+.note-view.bars-collapsed .bars-restore:active { opacity: 1; background: rgba(251, 246, 233, 0.9); }
+
 .stage {
   flex: 1;
   min-height: 0;
@@ -320,6 +392,7 @@ body {
   justify-content: center;
   padding: 8px 10px;
   overflow: hidden;
+  transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .spread {
