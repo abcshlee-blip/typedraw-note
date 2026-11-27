@@ -177,6 +177,15 @@
     if (collapsed === now && !silent) return;
     if (barsRaf) { cancelAnimationFrame(barsRaf); barsRaf = null; }
 
+    // 접힘 상태에서는 바 안의 버튼을 탭·키보드·화면읽기에서 잠시 빼둔다
+    if (collapsed) {
+      head.setAttribute('inert', '');
+      bar.setAttribute('inert', '');
+    } else {
+      head.removeAttribute('inert');
+      bar.removeAttribute('inert');
+    }
+
     // 1) 두 바의 자연 높이를 잰다 (같은 프레임 안에서만 잠깐 되돌려 본다)
     head.classList.remove('bar-anim');
     bar.classList.remove('bar-anim');
