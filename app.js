@@ -2445,29 +2445,47 @@
        표시되고, 그 표시는 같은 문서의 모든 기록에 함께 붙는다. 이 상태에서 뒤로가기를 누르면
        기록을 한 칸씩 물러나는 게 아니라 앱을 통째로 벗어나 버린다(폰에서는 앱이 바로 닫힘).
        또 뒤로/앞으로 이동을 한 번 하면, 새 입력이 들어오기 전까지는 그 입력을 쌓기에 인정하지 않는다.
+       ★ 모바일 크로미움의 User Activation 시점 ★
+       touchstart·pointerdown 시점에는 아직 '탭인지 스크롤인지' 확정되지 않아 User Activation이
+       붙지 않는다. 활성화는 touchend·pointerup·click·keydown 시점에 붙는다. 그래서 pointerdown에서
+       부른 pushState는 활성화 없는 기록이 되어, 펜으로 낙서한 뒤 뒤로가기를 누르면 앱이 그대로 닫혔다.
        그래서
          · 페이지를 열 때는 기록을 쌓지 않는다(쌓아 봐야 건너뛸 기록이 될 뿐이다).
-         · 사용자 제스처(pointerdown·touchstart·click·keydown) 안에서만 GUARD_DEPTH칸까지 쌓는다.
+         · 활성화가 붙는 제스처(pointerup·touchend·click·keydown)에서만, 그것도
+           navigator.userActivation.isActive가 true인 순간에만 쌓는다(미지원 브라우저는 리스너 안이면 인정).
+         · 한 제스처에 여러 칸을 몰아넣지 않고 한 번에 1칸씩(최대 GUARD_DEPTH칸) 채운다.
          · 뒤로가기로 한 칸 빠지면, popstate 안에서는 다시 쌓지 않고(그러면 건너뛸 기록이 된다)
            다음 제스처에서 그만큼 다시 채운다.
        이렇게 하면 뒤로가기는 언제나 '사용자가 만든 기록'만 지나므로 앱이 갑자기 닫히지 않는다. */
   var GUARD_DEPTH = 3;                 // 뒤로가기 한 번에 물러날 수 있는 여유 칸 수
+  var GUARD_GAP = 350;                 // 한 제스처(pointerup→touchend→click)에서 1칸만 채우는 최소 간격(ms)
   var nav = { depth: 0, leaving: false, leaveHops: 0, exitTimer: null, exitOpen: false, pendingUpdate: null };
+  var lastArmAt = 0;
   var activePromptCancel = null;   // 열려 있는 이름 입력창을 뒤로가기로 닫을 때
   var activeConfirmCancel = null;  // 열려 있는 확인 대화상자를 뒤로가기로 닫을 때
 
-  // 뒤로가기 여유 기록을 GUARD_DEPTH칸까지 채운다 — 반드시 사용자 제스처 안에서 부른다.
-  // (제스처 밖에서 부르면 브라우저가 '건너뛸 기록'으로 표시해 오히려 앱이 바로 닫힌다)
+  // 지금이 '사용자 입력이 인정되는 순간'인지 — 모바일 크로미움은 pointerdown 때는 false다.
+  // navigator.userActivation이 없는 브라우저에서는 제스처 리스너 안에서 부르는 것으로 인정한다.
+  function hasUserActivation() {
+    var ua = navigator.userActivation;
+    if (!ua || typeof ua.isActive !== 'boolean') return true;
+    return ua.isActive === true;
+  }
+
+  // 뒤로가기 여유 기록을 한 번에 1칸씩, GUARD_DEPTH칸까지 채운다.
+  // 반드시 활성화가 붙은 사용자 제스처 안에서만 부른다.
+  // (그 밖에서 부르면 브라우저가 '건너뛸 기록'으로 표시해 오히려 앱이 바로 닫힌다)
   function armGuard() {
     if (nav.leaving) return;
-    var tries = 0;
-    while (nav.depth < GUARD_DEPTH && tries < GUARD_DEPTH) {
-      tries++;
-      try {
-        history.pushState({ typedraw: 'guard', d: nav.depth + 1 }, '');
-      } catch (e) { return; }
-      nav.depth++;
-    }
+    if (nav.depth >= GUARD_DEPTH) return;
+    if (!hasUserActivation()) return;
+    var now = Date.now();
+    if (now - lastArmAt < GUARD_GAP) return;   // 같은 제스처에서 여러 칸 쌓지 않는다
+    lastArmAt = now;
+    try {
+      history.pushState({ typedraw: 'guard', d: nav.depth + 1 }, '');
+    } catch (e) { return; }
+    nav.depth++;
   }
 
   function openExitConfirm() {
@@ -2554,9 +2572,10 @@
       // 정작 다음 뒤로가기에서 앱이 닫힌다. 다음 제스처에서 armGuard()가 다시 채운다.
     });
 
-    // 사용자 제스처가 들어올 때마다 여유 기록을 확인하고 모자라면 채운다.
-    // (제스처 안에서 쌓은 기록만 브라우저가 '사용자가 만든 기록'으로 인정한다)
-    var marks = ['pointerdown', 'touchstart', 'click', 'keydown'];
+    // 사용자 제스처가 들어올 때마다 여유 기록을 확인하고 모자라면 1칸 채운다.
+    // User Activation이 붙는 끝 시점(pointerup·touchend·click·keydown)에서만 쌓는다.
+    // pointerdown·touchstart는 모바일에서 활성화가 없어 아예 쓰지 않는다(쌓아도 건너뛸 기록이 된다).
+    var marks = ['pointerup', 'touchend', 'click', 'keydown'];
     for (var i = 0; i < marks.length; i++) {
       document.addEventListener(marks[i], armGuard, { capture: true, passive: true });
     }
@@ -2800,7 +2819,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '8';
+  var APP_VERSION = '9';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)
@@ -2895,8 +2914,15 @@
     return nb;
   }
 
+  // 책장 바닥에 지금 화면의 코드 버전을 작게 표시한다(구버전 캐시와 눈으로 구분하려고)
+  function showAppVersion() {
+    var el = $('#appVer');
+    if (el) el.textContent = '· v' + APP_VERSION;
+  }
+
   function init() {
     state.viewMode = loadViewMode();
+    showAppVersion();
     bind();
     initBackGuard();
     updateViewSwitch();

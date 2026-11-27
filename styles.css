@@ -262,6 +262,13 @@ body {
   font-size: 12px;
   color: #8c8168;
 }
+.shelf-hint { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0 3px; }
+.app-version {
+  font-size: 11px;
+  color: #a2957c;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
 .link-btn {
   border: 0;
   background: none;
