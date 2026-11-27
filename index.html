@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>TypeDraw 노트</title>
+<meta name="theme-color" content="#f3ece0" />
+<meta name="description" content="종이 노트 감성의 타이핑 + 손그림 노트. 오프라인에서도 열리는 나만의 노트." />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon-192.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="TypeDraw 노트" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Nanum+Myeongjo:wght@400;700&family=Nanum+Pen+Script&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<svg id="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3.5 19 11l-6.2 1.2L10 18.5z"/><path d="M4.5 4.5 18 11.4"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6.5V5h14v1.5"/><path d="M12 5v14"/><path d="M8.5 19h7"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M3 21l4.2-1.1L20 7.1 16.9 4 4.1 16.8 3 21z"/><path d="M15.2 5.7 18.3 8.8"/></symbol>
+  <symbol id="i-hl" viewBox="0 0 24 24"><path d="M4 20h7"/><path d="M8.5 16.5 16 9l-3-3-7.5 7.5z"/><path d="M16 9l2.6-2.6a2.1 2.1 0 0 0-3-3L13 6l3 3z"/></symbol>
+  <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M9.5 19.5 3.9 14a1.6 1.6 0 0 1 0-2.3l6.6-6.6a1.6 1.6 0 0 1 2.3 0l4.6 4.6a1.6 1.6 0 0 1 0 2.3l-6.4 6.4z"/><path d="M6.6 10.6 13 17"/><path d="M9.5 19.5H20"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h9.5a6.5 6.5 0 0 1 0 13H8"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9h-9.5a6.5 6.5 0 0 0 0 13H16"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></symbol>
+  <symbol id="i-toc" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 19 7.5 12l7-7"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M14.5 19 7.5 12l7-7"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9.5 19 7-7-7-7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.5 12.5 5 5 10-11"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="m4 7 1.6 1.6L8.5 5.7"/><path d="m4 16 1.6 1.6 2.9-2.9"/><path d="M11.5 7.5H20"/><path d="M11.5 16.5H20"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="2.5"/><path d="M3.5 10.2h17"/><path d="M8 3.5v4"/><path d="M16 3.5v4"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.7"/><path d="m4.5 18 5-5.2 4 4.2 2.6-2.6 4.4 4.4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 6.5h15"/><path d="M9.5 6.5V4h5v2.5"/><path d="M6.5 6.5 7.5 20h9l1-13.5"/><path d="M10.5 10v6"/><path d="M13.5 10v6"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12"/><path d="m18 6-12 12"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7.5 11 4.5 4.5L16.5 11"/><path d="M5 20h14"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 20V9"/><path d="M7.5 13 12 8.5l4.5 4.5"/><path d="M5 4h14"/></symbol>
+  <symbol id="i-print" viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="3.5" y="9" width="17" height="7.5" rx="2"/><path d="M7 16.5h10V21H7z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2 2 0 0 1 6 3.5h13v17H6a2 2 0 0 0-2 2z"/><path d="M4 18.5A2 2 0 0 1 6 16.5h13"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="7" r="1.2"/><circle cx="15" cy="7" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="17" r="1.2"/><circle cx="15" cy="17" r="1.2"/></symbol>
+</svg>
+
+<div id="app">
+
+  <!-- ═══════════ 책장 ═══════════ -->
+  <section id="shelfView" class="view shelf-view">
+    <header class="shelf-head">
+      <div class="shelf-title">
+        <div class="brand">TypeDraw<span class="brand-dot">·</span>노트</div>
+        <div class="brand-sub">by 이성현</div>
+      </div>
+      <button id="btnNewBook" class="btn-new" type="button">
+        <svg class="ico"><use href="#i-plus"/></svg><span>새 노트</span>
+      </button>
+    </header>
+    <div id="bookGrid" class="book-grid" role="list"></div>
+    <div id="shelfEmpty" class="shelf-empty" hidden>
+      <p>아직 노트가 없어요.</p>
+      <button class="btn-new" type="button" id="btnNewBook2">
+        <svg class="ico"><use href="#i-plus"/></svg><span>첫 노트 만들기</span>
+      </button>
+    </div>
+    <footer class="shelf-foot">
+      <span>기기에 자동 저장 · 오프라인에서도 열립니다</span>
+      <button id="btnImportTop" class="link-btn" type="button">백업 불러오기</button>
+    </footer>
+  </section>
+
+  <!-- ═══════════ 노트 ═══════════ -->
+  <section id="noteView" class="view note-view" hidden>
+    <header class="note-head">
+      <button id="btnBack" class="icon-btn" type="button" aria-label="책장으로">
+        <svg class="ico"><use href="#i-back"/></svg>
+      </button>
+      <div class="note-title-wrap">
+        <div id="noteTitle" class="note-title" tabindex="0" role="button" aria-label="노트 제목 바꾸기">노트</div>
+        <div id="noteSub" class="note-sub">1쪽</div>
+      </div>
+      <button id="btnSearch" class="icon-btn" type="button" aria-label="검색">
+        <svg class="ico"><use href="#i-search"/></svg>
+      </button>
+      <button id="btnToc" class="icon-btn" type="button" aria-label="목차">
+        <svg class="ico"><use href="#i-toc"/></svg>
+      </button>
+      <button id="btnMenu" class="icon-btn" type="button" aria-label="더보기">
+        <svg class="ico"><use href="#i-more"/></svg>
+      </button>
+    </header>
+
+    <div id="stage" class="stage">
+      <div id="spread" class="spread"></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="tools" role="toolbar" aria-label="도구">
+        <button class="tool" data-tool="select" type="button" aria-label="선택/이동">
+          <svg class="ico"><use href="#i-cursor"/></svg><span>선택</span>
+        </button>
+        <button class="tool" data-tool="text" type="button" aria-label="타이핑">
+          <svg class="ico"><use href="#i-text"/></svg><span>타이핑</span>
+        </button>
+        <button class="tool" data-tool="pen" type="button" aria-label="펜">
+          <svg class="ico"><use href="#i-pen"/></svg><span>펜</span>
+        </button>
+        <button class="tool" data-tool="hl" type="button" aria-label="형광펜">
+          <svg class="ico"><use href="#i-hl"/></svg><span>형광펜</span>
+        </button>
+        <button class="tool" data-tool="eraser" type="button" aria-label="지우개">
+          <svg class="ico"><use href="#i-eraser"/></svg><span>지우개</span>
+        </button>
+        <span class="tool-sep" aria-hidden="true"></span>
+        <button id="btnInsert" class="tool" type="button" aria-label="삽입">
+          <svg class="ico"><use href="#i-plus"/></svg><span>삽입</span>
+        </button>
+        <span class="tool-grow"></span>
+        <button id="btnUndo" class="tool" type="button" aria-label="실행 취소">
+          <svg class="ico"><use href="#i-undo"/></svg>
+        </button>
+        <button id="btnRedo" class="tool" type="button" aria-label="다시 실행">
+          <svg class="ico"><use href="#i-redo"/></svg>
+        </button>
+      </div>
+      <div id="optRow" class="opt-row"></div>
+      <div class="pager">
+        <button id="btnPrev" class="page-btn" type="button" aria-label="이전 페이지">
+          <svg class="ico"><use href="#i-left"/></svg>
+        </button>
+        <button id="pageLabel" class="page-label" type="button">1 / 2</button>
+        <button id="btnNext" class="page-btn" type="button" aria-label="다음 페이지">
+          <svg class="ico"><use href="#i-right"/></svg>
+        </button>
+        <button id="btnAddPage" class="page-add" type="button">
+          <svg class="ico"><use href="#i-plus"/></svg><span>쪽</span>
+        </button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ═══════════ 오버레이 ═══════════ -->
+<div id="scrim" class="scrim" hidden></div>
+
+<!-- 삽입 메뉴 -->
+<div id="insertMenu" class="popover" hidden>
+  <button type="button" data-insert="check"><svg class="ico"><use href="#i-list"/></svg>체크리스트</button>
+  <button type="button" data-insert="date"><svg class="ico"><use href="#i-cal"/></svg>오늘 날짜</button>
+  <button type="button" data-insert="photo"><svg class="ico"><use href="#i-img"/></svg>사진</button>
+</div>
+
+<!-- 더보기 메뉴 -->
+<div id="moreMenu" class="popover" hidden>
+  <button type="button" data-more="settings"><svg class="ico"><use href="#i-gear"/></svg>노트 설정</button>
+  <button type="button" data-more="png"><svg class="ico"><use href="#i-img"/></svg>현재 페이지 PNG</button>
+  <button type="button" data-more="print"><svg class="ico"><use href="#i-print"/></svg>인쇄 / PDF</button>
+  <button type="button" data-more="export"><svg class="ico"><use href="#i-down"/></svg>백업 내보내기 (JSON)</button>
+  <button type="button" data-more="import"><svg class="ico"><use href="#i-up"/></svg>백업 불러오기</button>
+  <hr />
+  <button type="button" data-more="delete" class="danger"><svg class="ico"><use href="#i-trash"/></svg>노트 삭제</button>
+</div>
+
+<!-- 표지 ⋯ 메뉴 -->
+<div id="bookMenu" class="popover" hidden>
+  <button type="button" data-book="rename"><svg class="ico"><use href="#i-text"/></svg>이름 바꾸기</button>
+  <button type="button" data-book="design"><svg class="ico"><use href="#i-gear"/></svg>표지 · 속지</button>
+  <button type="button" data-book="delete" class="danger"><svg class="ico"><use href="#i-trash"/></svg>노트 삭제</button>
+</div>
+
+<!-- 노트 설정 시트 -->
+<div id="settingsSheet" class="sheet" hidden>
+  <div class="sheet-head">
+    <h3>노트 설정</h3>
+    <button class="icon-btn" type="button" data-close-sheet aria-label="닫기">
+      <svg class="ico"><use href="#i-close"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body">
+    <label class="field">
+      <span>제목</span>
+      <input id="setTitle" type="text" maxlength="40" autocomplete="off" />
+    </label>
+
+    <div class="field">
+      <span>표지 색</span>
+      <div id="setColors" class="swatches cover-swatches"></div>
+    </div>
+
+    <div class="field">
+      <span>표지 무늬</span>
+      <div id="setPatterns" class="chips patterns"></div>
+    </div>
+
+    <div class="field">
+      <span>속지</span>
+      <div id="setPaper" class="chips papers"></div>
+    </div>
+
+    <div class="field">
+      <span>종이색</span>
+      <div id="setPaperColor" class="chips paper-colors"></div>
+    </div>
+    <p class="hint">속지와 종이색은 이 노트의 모든 쪽에 똑같이 적용됩니다.</p>
+  </div>
+</div>
+
+<!-- 목차 서랍 -->
+<div id="tocDrawer" class="drawer" hidden>
+  <div class="drawer-head">
+    <h3>목차</h3>
+    <div class="drawer-actions">
+      <button id="tocAddPage" class="text-btn" type="button">
+        <svg class="ico"><use href="#i-plus"/></svg>쪽 추가
+      </button>
+      <button class="icon-btn" type="button" data-close-drawer aria-label="닫기">
+        <svg class="ico"><use href="#i-close"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="tocList" class="toc-list"></div>
+</div>
+
+<!-- 검색 -->
+<div id="searchModal" class="modal" hidden>
+  <div class="modal-box">
+    <div class="search-row">
+      <svg class="ico"><use href="#i-search"/></svg>
+      <input id="searchInput" type="search" placeholder="노트 안에서 찾기" autocomplete="off" />
+      <button class="icon-btn" type="button" data-close-search aria-label="닫기">
+        <svg class="ico"><use href="#i-close"/></svg>
+      </button>
+    </div>
+    <div id="searchResults" class="search-results"></div>
+  </div>
+</div>
+
+<!-- 미리보기/이름 입력 등 공용 프롬프트 -->
+<div id="promptModal" class="modal" hidden>
+  <div class="modal-box prompt-box">
+    <h3 id="promptTitle">제목</h3>
+    <input id="promptInput" type="text" autocomplete="off" />
+    <div class="prompt-actions">
+      <button id="promptCancel" class="text-btn" type="button">취소</button>
+      <button id="promptOk" class="btn-solid" type="button">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 확인 -->
+<div id="confirmModal" class="modal" hidden>
+  <div class="modal-box prompt-box">
+    <h3 id="confirmTitle">확인</h3>
+    <p id="confirmText" class="confirm-text"></p>
+    <div class="prompt-actions">
+      <button id="confirmCancel" class="text-btn" type="button">취소</button>
+      <button id="confirmOk" class="btn-solid danger" type="button">삭제</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<input id="photoInput" type="file" accept="image/*" multiple hidden />
+<input id="importInput" type="file" accept="application/json,.json" hidden />
+
+<div id="printArea"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
