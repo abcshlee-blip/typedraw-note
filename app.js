@@ -45,6 +45,8 @@
     { id: 'gowun', name: '고운', css: "'Gowun Dodum', 'Noto Sans KR', sans-serif" }
   ];
   var PEN_COLORS = ['#2b2b2b', '#1f4e9c', '#a8322a', '#2f6b3f', '#7a4fb0', '#c2761b'];
+  /* 타이핑 글씨 색 — 펜 색과 같은 톤에 또렷한 파랑·빨강을 더한다 */
+  var TEXT_COLORS = ['#2b2b2b', '#1f4e9c', '#2563eb', '#a8322a', '#e03131', '#2f6b3f', '#7a4fb0', '#c2761b'];
   var HL_COLORS = ['#ffe36e', '#b7f0a8', '#ffc2d1', '#bfe3ff', '#ffd0a3'];
   var TEXT_SIZES = [24, 32, 42, 54];
 
@@ -1296,7 +1298,7 @@
       if (obj && obj.type === 'text') {
         parts.push({ label: '글꼴', node: fontGroup(obj) });
         parts.push({ label: '크기', node: sizeGroup(obj) });
-        parts.push({ label: '색', node: colorGroup(obj, inkColors()) });
+        parts.push({ label: '색', node: colorGroup(obj, textColors()) });
       } else if (obj) {
         var delWrap = el('div', 'opt-group');
         var db = el('button', 'chip');
@@ -1323,7 +1325,7 @@
     } else if (tool === 'text') {
       parts.push({ label: '글꼴', node: fontGroup(null) });
       parts.push({ label: '크기', node: sizeGroup(null) });
-      parts.push({ label: '색', node: colorGroup(null, inkColors()) });
+      parts.push({ label: '색', node: colorGroup(null, textColors()) });
     } else if (tool === 'pen') {
       parts.push({ label: '색', node: colorGroup(null, inkColors(), state.pen.color, function (c) { state.pen.color = c; applyToSelectedText('color', c); }) });
       parts.push({ label: '굵기', node: widthGroup([2, 3.5, 6, 9], state.pen.width, function (w) { state.pen.width = w; }) });
@@ -1445,6 +1447,11 @@
 
   function inkColors() {
     return isDarkPaper() ? PEN_COLORS.concat(['#f2efe6']) : PEN_COLORS;
+  }
+
+  /* 타이핑 글씨 색 목록(파랑·빨강 포함), 다크 종이에서는 흰색을 더한다 */
+  function textColors() {
+    return isDarkPaper() ? TEXT_COLORS.concat(['#f2efe6']) : TEXT_COLORS;
   }
 
   function fontGroup(targetObj) {
@@ -3071,7 +3078,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '12';
+  var APP_VERSION = '13';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)
