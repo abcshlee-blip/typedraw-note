@@ -516,6 +516,10 @@ body {
 .obj { pointer-events: auto; }
 .spread.drawing .obj { pointer-events: none; }
 .spread.drawing .obj .txt, .spread.drawing .obj .item, .spread.drawing .obj .chk-head { user-select: none; -webkit-user-select: none; }
+/* 사진은 필기 도구를 쓰는 중에도 마우스로 잡아 옮길 수 있게 살려 둔다(v15).
+   S팬·손가락 필기는 사진 위에서도 그대로 되도록 위 버튼줄은 이때 누를 수 없게 둔다. */
+.spread.drawing .obj-image { pointer-events: auto; }
+.spread.drawing .obj-image .handle-bar { display: none; }   /* 필기 도구일 때는 위 버튼줄을 보이지 않게(팬 필기를 막지 않게) */
 
 .page .folio {
   position: absolute;
@@ -663,10 +667,16 @@ body {
 }
 
 /* 사진 */
+.obj-image { cursor: grab; }
+.obj-image.moving { cursor: grabbing; }
 .obj-image img {
   display: block;
   width: 100%;
   height: auto;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
   border-radius: calc(var(--pscale) * 3px);
   box-shadow: 0 calc(var(--pscale) * 3px) calc(var(--pscale) * 10px) rgba(0, 0, 0, 0.22);
 }
