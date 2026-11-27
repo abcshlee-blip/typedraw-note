@@ -2452,7 +2452,7 @@
            다음 제스처에서 그만큼 다시 채운다.
        이렇게 하면 뒤로가기는 언제나 '사용자가 만든 기록'만 지나므로 앱이 갑자기 닫히지 않는다. */
   var GUARD_DEPTH = 3;                 // 뒤로가기 한 번에 물러날 수 있는 여유 칸 수
-  var nav = { depth: 0, leaving: false, leaveHops: 0, exitOpen: false, pendingUpdate: null };
+  var nav = { depth: 0, leaving: false, leaveHops: 0, exitTimer: null, exitOpen: false, pendingUpdate: null };
   var activePromptCancel = null;   // 열려 있는 이름 입력창을 뒤로가기로 닫을 때
   var activeConfirmCancel = null;  // 열려 있는 확인 대화상자를 뒤로가기로 닫을 때
 
@@ -2505,6 +2505,14 @@
       return;
     }
     try { history.go(-1); } catch (e) {}
+    // 더 물러날 기록이 없으면(설치 앱의 첫 화면) popstate가 오지 않는다 → 안내만 남긴다
+    clearTimeout(nav.exitTimer);
+    nav.exitTimer = setTimeout(function () {
+      if (!nav.leaving) return;
+      nav.leaving = false;
+      nav.depth = 0;
+      toast('앱의 첫 화면이라 더 나갈 곳이 없어요. 뒤로가기를 한 번 더 누르면 앱이 닫힙니다');
+    }, 500);
   }
 
   // 뒤로가기 한 번에 닫을 것이 있으면 닫는다
