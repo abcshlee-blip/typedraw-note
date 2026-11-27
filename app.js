@@ -2267,6 +2267,17 @@
       setTimeout(function () { if (!$('#noteView').hidden) renderSpread(); }, 260);
     });
 
+    // 바 높이가 바뀌면(도구 옵션 줄이 생기고 사라질 때, 글꼴이 늦게 실릴 때) 종이 크기를 다시 맞춘다
+    if (typeof ResizeObserver === 'function') {
+      var stageEl = $('#stage');
+      if (stageEl) {
+        new ResizeObserver(function () {
+          if ($('#noteView').hidden) return;
+          layoutPages();
+        }).observe(stageEl);
+      }
+    }
+
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') flushSave();
     });
