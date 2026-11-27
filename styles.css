@@ -281,7 +281,7 @@ body {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: calc(6px + env(safe-area-inset-top)) 8px 6px;
+  padding: calc(3px + env(safe-area-inset-top)) 6px 3px;
   background: linear-gradient(#f7f1e5, rgba(247, 241, 229, 0.75));
   border-bottom: 1px solid rgba(180, 160, 125, 0.35);
 }
@@ -341,12 +341,12 @@ body {
 .note-view.bars-collapsed .toolbar { transform: translateY(8px); }
 
 /* 접힌 동안 종이가 화면을 더 넓게 쓴다 */
-.note-view.bars-collapsed .stage { padding: 4px 2px; }
+.note-view.bars-collapsed .stage { padding: 2px; }
 
 /* 접힘 상태에서만 뜨는 작은 복귀 버튼 */
 .bars-restore {
   position: absolute;
-  top: calc(6px + env(safe-area-inset-top));
+  top: calc(3px + env(safe-area-inset-top));
   right: 8px;
   z-index: 20;
   display: inline-flex;
@@ -390,7 +390,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 10px;
+  padding: 4px 6px;
   overflow: hidden;
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -629,7 +629,7 @@ body {
 .toolbar {
   background: linear-gradient(#f8f2e6, #efe5d3);
   border-top: 1px solid rgba(180, 160, 125, 0.45);
-  padding: 5px 8px calc(4px + env(safe-area-inset-bottom));
+  padding: 4px 8px calc(3px + env(safe-area-inset-bottom));
   box-shadow: 0 -6px 18px -14px rgba(60, 40, 20, 0.6);
 }
 
@@ -669,7 +669,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 2px 3px;
+  padding: 2px 2px 1px;
   overflow-x: auto;
   scrollbar-width: none;
   min-height: 0;
@@ -732,7 +732,7 @@ body {
   justify-content: center;
   flex-wrap: wrap;
   gap: 4px 10px;
-  padding: 2px 0 1px;
+  padding: 0;
 }
 .pager-nav {
   display: flex;
@@ -772,7 +772,7 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16), inset 0 0 0 1px rgba(140, 74, 63, 0.28);
 }
 .page-btn {
-  width: 34px; height: 30px;
+  width: 34px; height: 28px;
   display: grid; place-items: center;
   border: 0; border-radius: 8px;
   background: none; color: #5f5542;
@@ -795,7 +795,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 28px;
+  height: 26px;
   padding: 0 9px 0 6px;
   border-radius: 999px;
   border: 1px solid rgba(140, 120, 90, 0.45);
@@ -1106,11 +1106,11 @@ body {
 
 /* ═══════════ 넓은 화면 ═══════════ */
 @media (min-width: 768px) {
-  .note-head { padding: 8px 14px; }
+  .note-head { padding: 3px 10px; }
   .note-title { font-size: 17px; }
-  .stage { padding: 14px 18px; }
-  .toolbar { padding: 7px 14px 8px; }
-  .tool { min-width: 56px; height: 48px; font-size: 11px; }
+  .stage { padding: 3px 8px; }
+  .toolbar { padding: 3px 12px 4px; }
+  .tool { min-width: 52px; height: 44px; font-size: 11px; }
   .tool .ico { width: 22px; height: 22px; }
   .book-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 30px 24px; padding: 14px 32px 36px; }
   .shelf-head { padding: 20px 32px 14px; }
@@ -1119,6 +1119,19 @@ body {
 
 @media (min-width: 1100px) {
   .book-grid { grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)); }
+}
+
+/* 넓은 화면에서는 색·굵기 줄과 쪽 이동 줄을 한 줄로 합쳐 종이 세로 공간을 더 준다 */
+@media (min-width: 1000px) {
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 14px;
+  }
+  .tools { flex: 1 0 100%; }
+  .opt-row { flex: 1 1 0; min-width: 0; padding: 1px 0; }
+  .pager { flex: 0 0 auto; flex-wrap: nowrap; padding: 1px 0; }
 }
 
 /* ═══════════ 인쇄 ═══════════ */
