@@ -51,6 +51,9 @@
   /* 2쪽 펼침 기준: 이 너비 이상이면 두 쪽을 나란히 (폴드 펼친 화면 포함) */
   var VIEW_MIN = 540;
   var VIEW_KEY = 'tdn.viewMode';
+  /* 이 너비부터는 하단 바를 한 줄로 압축한다(폴드 펼친 화면·태블릿) */
+  var wideBarMq = (typeof window.matchMedia === 'function') ? window.matchMedia('(min-width: 540px)') : null;
+  function isWideBar() { return !!(wideBarMq && wideBarMq.matches); }
 
   /* ─────────── 상태 ─────────── */
   var state = {
@@ -131,10 +134,23 @@
   }
   function updateViewSwitch() {
     var box = $('#viewSwitch');
-    if (!box) return;
-    $$('button', box).forEach(function (b) {
-      b.setAttribute('aria-pressed', b.dataset.view === state.viewMode ? 'true' : 'false');
-    });
+    if (box) {
+      $$('button', box).forEach(function (b) {
+        b.setAttribute('aria-pressed', b.dataset.view === state.viewMode ? 'true' : 'false');
+      });
+    }
+    var c = $('#btnViewCycle');
+    if (c) {
+      var spread = wantSpread();
+      var now = spread ? '2쪽' : '1쪽';
+      var next = spread ? '1쪽' : '2쪽';
+      c.textContent = now;
+      c.title = '지금 ' + now + ' 보기 — 누르면 ' + next + ' 보기';
+      c.setAttribute('aria-label', c.title);
+    }
+  }
+  function cycleViewMode() {
+    setViewMode(wantSpread() ? 'one' : 'two');
   }
   function setViewMode(mode) {
     if (mode !== 'two' && mode !== 'one' && mode !== 'auto') mode = 'auto';
@@ -1245,6 +1261,7 @@
 
   /* ─────────── 툴바 ─────────── */
   function setTool(tool, silent) {
+    if (tool !== state.tool) closeStylePopover();
     state.tool = tool;
     $$('.tool[data-tool]').forEach(function (b) {
       b.classList.toggle('active', b.dataset.tool === tool);
@@ -1267,15 +1284,19 @@
 
   function renderOptions() {
     var row = $('#optRow');
-    row.innerHTML = '';
+    var pop = $('#stylePopover');
+    var wide = isWideBar();
+    if (row) row.innerHTML = '';
+    if (pop) pop.innerHTML = '';
     var tool = state.tool;
+    var parts = [];   // { label, node } — 넓은 화면에서는 팝오버에, 좁은 화면에서는 옵션 줄에 들어간다
 
     if (tool === 'select') {
       var obj = selectedObject();
       if (obj && obj.type === 'text') {
-        row.appendChild(fontGroup(obj));
-        row.appendChild(sizeGroup(obj));
-        row.appendChild(colorGroup(obj, inkColors()));
+        parts.push({ label: '글꼴', node: fontGroup(obj) });
+        parts.push({ label: '크기', node: sizeGroup(obj) });
+        parts.push({ label: '색', node: colorGroup(obj, inkColors()) });
       } else if (obj) {
         var delWrap = el('div', 'opt-group');
         var db = el('button', 'chip');
@@ -1293,25 +1314,133 @@
           renderOptions();
         });
         delWrap.appendChild(db);
-        row.appendChild(delWrap);
+        parts.push({ label: '선택', node: delWrap });
       } else {
         var hint = el('span', 'opt-label');
         hint.textContent = '글자나 사진을 탭해 옮기거나 꾸밀 수 있어요';
-        row.appendChild(hint);
+        parts.push({ label: '', node: hint });
       }
     } else if (tool === 'text') {
-      row.appendChild(fontGroup(null));
-      row.appendChild(sizeGroup(null));
-      row.appendChild(colorGroup(null, inkColors()));
+      parts.push({ label: '글꼴', node: fontGroup(null) });
+      parts.push({ label: '크기', node: sizeGroup(null) });
+      parts.push({ label: '색', node: colorGroup(null, inkColors()) });
     } else if (tool === 'pen') {
-      row.appendChild(colorGroup(null, inkColors(), state.pen.color, function (c) { state.pen.color = c; applyToSelectedText('color', c); }));
-      row.appendChild(widthGroup([2, 3.5, 6, 9], state.pen.width, function (w) { state.pen.width = w; }));
+      parts.push({ label: '색', node: colorGroup(null, inkColors(), state.pen.color, function (c) { state.pen.color = c; applyToSelectedText('color', c); }) });
+      parts.push({ label: '굵기', node: widthGroup([2, 3.5, 6, 9], state.pen.width, function (w) { state.pen.width = w; }) });
     } else if (tool === 'hl') {
-      row.appendChild(colorGroup(null, HL_COLORS, state.hl.color, function (c) { state.hl.color = c; }));
-      row.appendChild(widthGroup([14, 22, 32], state.hl.width, function (w) { state.hl.width = w; }));
+      parts.push({ label: '색', node: colorGroup(null, HL_COLORS, state.hl.color, function (c) { state.hl.color = c; }) });
+      parts.push({ label: '굵기', node: widthGroup([14, 22, 32], state.hl.width, function (w) { state.hl.width = w; }) });
     } else if (tool === 'eraser') {
-      row.appendChild(widthGroup([16, 28, 46], state.eraser.width, function (w) { state.eraser.width = w; }, '지우개'));
+      parts.push({ label: '굵기', node: widthGroup([16, 28, 46], state.eraser.width, function (w) { state.eraser.width = w; }, '지우개') });
     }
+
+    if (wide) {
+      // 한 줄 바: 옵션은 색·굵기 버튼을 누르면 열리는 팝오버 안에 둔다
+      if (pop) {
+        parts.forEach(function (p) {
+          var r = el('div', 'pop-row');
+          if (p.label) {
+            var l = el('span', 'pop-label');
+            l.textContent = p.label;
+            r.appendChild(l);
+          }
+          r.appendChild(p.node);
+          pop.appendChild(r);
+        });
+        if (!pop.hidden) positionStylePopover();
+      }
+    } else if (row) {
+      parts.forEach(function (p) { row.appendChild(p.node); });
+    }
+
+    updateStyleBtn(parts.length > 0);
+    if (!parts.length) closeStylePopover();
+  }
+
+  /* ─────────── 색·굵기 압축 버튼과 팝오버 ─────────── */
+  function styleState() {
+    var t = state.tool;
+    if (t === 'pen') return { kind: 'pen', color: state.pen.color, width: state.pen.width, cap: '색' };
+    if (t === 'hl') return { kind: 'hl', color: state.hl.color, width: state.hl.width, cap: '색' };
+    if (t === 'eraser') return { kind: 'eraser', color: '#8a7d64', width: state.eraser.width, cap: '굵기' };
+    if (t === 'text') return { kind: 'text', color: state.text.color, width: 0, cap: '색' };
+    if (t === 'select') {
+      var sel = selectedObject();
+      if (!sel) return null;
+      return { kind: 'text', color: sel.type === 'text' ? sel.color : '#8a7d64', width: 0, cap: '선택' };
+    }
+    return null;
+  }
+
+  function updateStyleBtn(has) {
+    var btn = $('#btnStyle');
+    if (!btn) return;
+    var st = styleState();
+    var ok = !!has && !!st;
+    btn.disabled = !ok;
+    var prev = btn.querySelector('.style-prev');
+    var cap = btn.querySelector('.style-cap');
+    if (cap) cap.textContent = (ok && st) ? st.cap : '색';
+    if (!prev) return;
+    prev.innerHTML = '';
+    var d = el('span', 'style-dot');
+    if (ok && st && st.kind === 'text') {
+      d.classList.add('is-text');
+      d.textContent = '가';
+      d.style.color = st.color;
+    } else if (ok && st && st.kind === 'eraser') {
+      d.classList.add('is-eraser');
+    } else if (ok && st && st.kind === 'hl') {
+      var hw = Math.round(clamp(st.width * 0.65, 10, 20));
+      d.style.width = hw + 'px';
+      d.style.height = '9px';
+      d.style.borderRadius = '3px';
+      d.style.background = st.color;
+      d.style.opacity = '0.85';
+    } else if (ok && st) {
+      var s = Math.round(clamp(5 + st.width * 1.5, 9, 19));
+      d.style.width = s + 'px';
+      d.style.height = s + 'px';
+      d.style.background = st.color;
+    }
+    prev.appendChild(d);
+  }
+
+  function stylePopoverOpen() {
+    var p = $('#stylePopover');
+    return !!(p && !p.hidden);
+  }
+
+  function positionStylePopover() {
+    var pop = $('#stylePopover');
+    var btn = $('#btnStyle');
+    if (!pop || !btn || pop.hidden) return;
+    var r = btn.getBoundingClientRect();
+    var w = pop.offsetWidth;
+    var h = pop.offsetHeight;
+    var left = Math.min(window.innerWidth - w - 8, Math.max(8, r.left + r.width / 2 - w / 2));
+    var top = r.top - h - 8;
+    if (top < 8) top = Math.min(window.innerHeight - h - 8, r.bottom + 8);
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(Math.max(8, top)) + 'px';
+  }
+
+  function openStylePopover() {
+    var pop = $('#stylePopover');
+    var btn = $('#btnStyle');
+    if (!pop || !btn || btn.disabled) return;
+    renderOptions();
+    if (!pop.firstChild) return;
+    pop.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    positionStylePopover();
+  }
+
+  function closeStylePopover() {
+    var pop = $('#stylePopover');
+    var btn = $('#btnStyle');
+    if (pop && !pop.hidden) pop.hidden = true;
+    if (btn) btn.setAttribute('aria-expanded', 'false');
   }
 
   function inkColors() {
@@ -2254,6 +2383,7 @@
   }
   function hidePopovers() {
     ['#insertMenu', '#moreMenu', '#bookMenu'].forEach(function (s) { var m = $(s); if (m) m.hidden = true; });
+    closeStylePopover();
     if ($('#tocDrawer').hidden && $('#settingsSheet').hidden && $('#searchModal').hidden && $('#promptModal').hidden && $('#confirmModal').hidden) {
       $('#scrim').hidden = true;
     }
@@ -2544,6 +2674,7 @@
     if (!$('#searchModal').hidden) { closeSearch(); return true; }
     if (!$('#settingsSheet').hidden) { closeSettings(); return true; }
     if (!$('#tocDrawer').hidden) { closeToc(); return true; }
+    if (stylePopoverOpen()) { closeStylePopover(); return true; }
     var pops = ['#insertMenu', '#moreMenu', '#bookMenu'];
     for (var i = 0; i < pops.length; i++) {
       var m = $(pops[i]);
@@ -2633,6 +2764,36 @@
       if (!b) return;
       setViewMode(b.dataset.view);
     });
+
+    // 색·굵기 압축 버튼(넓은 화면) — 누르면 바 위에 팝오버가 열린다
+    $('#btnStyle').addEventListener('click', function () {
+      if (stylePopoverOpen()) { closeStylePopover(); return; }
+      hidePopovers();
+      openStylePopover();
+    });
+    // 색·굵기를 고르거나 바깥을 누르면 닫힌다
+    $('#stylePopover').addEventListener('click', function (e) {
+      if (e.target.closest('button')) closeStylePopover();
+    });
+    document.addEventListener('pointerdown', function (e) {
+      if (!stylePopoverOpen()) return;
+      if (e.target.closest('#stylePopover') || e.target.closest('#btnStyle')) return;
+      closeStylePopover();
+    }, true);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && stylePopoverOpen()) closeStylePopover();
+    });
+
+    // 보기 방식 순환 버튼(넓은 화면): 2쪽 ↔ 1쪽
+    $('#btnViewCycle').addEventListener('click', cycleViewMode);
+
+    // 화면 폭이 바뀌면 팝오버 위치를 다시 잡고, 한 줄 바 ↔ 옵션 줄로 갈라질 때는 다시 그린다
+    window.addEventListener('resize', function () { if (stylePopoverOpen()) positionStylePopover(); });
+    if (wideBarMq) {
+      var onWideChange = function () { closeStylePopover(); renderOptions(); };
+      if (wideBarMq.addEventListener) wideBarMq.addEventListener('change', onWideChange);
+      else if (wideBarMq.addListener) wideBarMq.addListener(onWideChange);
+    }
 
     $('#btnInsert').addEventListener('click', function () {
       var menu = $('#insertMenu');
@@ -2819,7 +2980,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '10';
+  var APP_VERSION = '11';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)
