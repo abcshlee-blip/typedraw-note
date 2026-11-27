@@ -2565,6 +2565,94 @@
     stepPage(dir);
   }
 
+  /* ─────────── 마우스 휠로 책장 넘기기 ───────────
+     마우스 휠을 아래(또는 오른쪽)로 굴리면 다음 쪽, 위(또는 왼쪽)로 굴리면 이전 쪽으로 넘긴다.
+     MX Anywhere 3S처럼 부드럽게 구르는 휠은 한 번 굴릴 때 wheel 이벤트가 수십 개 오고,
+     손을 뗀 뒤에도 관성으로 계속 들어온다. 그래서
+       · 델타를 모아 WHEEL_STEP 이상이 되면 한 번만 넘기고,
+       · 넘긴 뒤에는 wheel 이벤트가 WHEEL_QUIET 이상 끊기고 WHEEL_COOLDOWN이 지날 때까지 잠가,
+         관성 꼬리로 두 번 넘어가지 않게 한다(한 번 굴리면 딱 1쪽/1펼침).
+     다음 경우에는 개입하지 않는다.
+       · 확대/축소 단축키(ctrl·meta + 휠)
+       · 책장 화면, 열려 있는 창·서랍·팝오버(목차·검색·설정·더보기/삽입/책 메뉴·색굵기·이름 입력·확인)
+       · 실제로 스크롤할 것이 있는 입력창 안에서 굴릴 때
+       · 첫 쪽에서 위로, 마지막 쪽에서 아래로 굴릴 때(조용히 무시) */
+  var WHEEL_STEP = 36;        // 이만큼 델타가 모이면 한 번 넘긴다(딱딱한 휠 한 칸 100/120, 부드러운 휠은 여러 이벤트)
+  var WHEEL_QUIET = 220;      // 이만큼 wheel 이벤트가 없으면 '새로 굴린 것'으로 본다
+  var WHEEL_COOLDOWN = 620;   // 넘긴 직후 최소 이만큼은 다음 넘김을 열지 않는다(넘김 애니메이션 0.46초 + 여유)
+  var wheelTurn = { acc: 0, sign: 0, lastAt: 0, locked: false, until: 0 };
+
+  /* 창·서랍·팝오버가 열려 있는지 */
+  function overlayOpen() {
+    var ids = ['#settingsSheet', '#tocDrawer', '#searchModal', '#promptModal', '#confirmModal', '#exitModal', '#insertMenu', '#moreMenu', '#bookMenu'];
+    for (var i = 0; i < ids.length; i++) {
+      var n = $(ids[i]);
+      if (n && !n.hidden) return true;
+    }
+    return stylePopoverOpen();
+  }
+
+  /* 지금 굴린 곳이 '실제로 스크롤되는 입력창' 안인지 — 그러면 브라우저 스크롤에 맡긴다 */
+  function scrollsInside(t) {
+    var n = (t && t.nodeType === 3) ? t.parentElement : t;
+    while (n && n.nodeType === 1) {
+      var editable = n.isContentEditable || n.tagName === 'TEXTAREA' || n.tagName === 'INPUT' || n.tagName === 'SELECT';
+      if (editable) return n.scrollHeight > n.clientHeight + 1;
+      if (n.id === 'stage') break;
+      n = n.parentElement;
+    }
+    return false;
+  }
+
+  /* 이 방향으로 더 넘길 쪽이 있는지 */
+  function canTurnPage(dir) {
+    var nb = state.nb;
+    if (!nb) return false;
+    var start = state.spread ? state.idx - (state.idx % 2) : state.idx;
+    var step = state.spread ? 2 : 1;
+    return dir > 0 ? (start + step <= nb.pages.length - 1) : (start > 0);
+  }
+
+  function onStageWheel(e) {
+    if ($('#noteView').hidden) return;               // 책장 화면
+    if (e.ctrlKey || e.metaKey) return;              // 확대/축소
+    if (overlayOpen()) return;                       // 창·서랍·팝오버의 스크롤을 방해하지 않는다
+    if (scrollsInside(e.target)) return;
+
+    var dx = e.deltaX || 0, dy = e.deltaY || 0;
+    if (e.deltaMode === 1) { dx *= 16; dy *= 16; }        // 줄 단위
+    else if (e.deltaMode === 2) { dx *= 400; dy *= 400; } // 페이지 단위
+    var d = Math.abs(dx) > Math.abs(dy) ? dx : dy;   // 가로로 굴렸으면 가로를 따른다
+    if (!d) return;
+
+    if (e.cancelable) e.preventDefault();            // 종이는 넘어가거나 제자리 — 화면이 스크롤되지 않게
+
+    var now = Date.now();
+    var quiet = now - wheelTurn.lastAt > WHEEL_QUIET;
+    wheelTurn.lastAt = now;
+    if (quiet) { wheelTurn.acc = 0; wheelTurn.sign = 0; }
+
+    if (state.flipping) { wheelTurn.acc = 0; return; }   // 넘기는 중
+    if (wheelTurn.locked) {
+      // 손을 멈췄고 쿨다운도 지났으면 새로 굴린 것으로 받는다. 아니면 관성 꼬리 — 버린다.
+      if (quiet && now >= wheelTurn.until) wheelTurn.locked = false;
+      wheelTurn.acc = 0;
+      if (wheelTurn.locked) return;
+    }
+
+    var sign = d > 0 ? 1 : -1;
+    if (sign !== wheelTurn.sign) { wheelTurn.acc = 0; wheelTurn.sign = sign; }  // 방향을 바꿨으면 새로 모은다
+    wheelTurn.acc += d;
+    if (Math.abs(wheelTurn.acc) < WHEEL_STEP) return;
+
+    var dir = wheelTurn.acc > 0 ? 1 : -1;
+    wheelTurn.acc = 0;
+    wheelTurn.locked = true;                        // 한 번 굴림에는 한 번만
+    wheelTurn.until = now + WHEEL_COOLDOWN;
+    if (!canTurnPage(dir)) return;                  // 첫/마지막 쪽: 조용히 무시
+    stepPage(dir);
+  }
+
   /* ─────────── 뒤로가기 가드 ───────────
      폰의 뒤로가기 버튼·제스처로 앱이 바로 닫히지 않게 한다.
        · 열려 있는 창·메뉴(목차·검색·설정·더보기/삽입 메뉴·이름 입력·확인 대화상자)가 있으면 그것부터 닫고,
@@ -2920,6 +3008,9 @@
     stageEl.addEventListener('pointerup', gestureUp, true);
     stageEl.addEventListener('pointercancel', gestureUp, true);
 
+    // 마우스 휠로도 책장을 넘긴다(브라우저 스크롤을 막아야 해서 passive: false)
+    stageEl.addEventListener('wheel', onStageWheel, { passive: false });
+
     // 키보드
     document.addEventListener('keydown', function (e) {
       var t = e.target;
@@ -2980,7 +3071,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '11';
+  var APP_VERSION = '12';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)
