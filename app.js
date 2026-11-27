@@ -1471,6 +1471,7 @@
   function goPage(index, opts) {
     opts = opts || {};
     if (!state.nb) return;
+    if (state.flipping) cancelFlip();   // 목차처럼 도중에 다른 쪽을 고르면 넘기기를 정리하고 바로 이동한다
     var total = state.nb.pages.length;
     index = clamp(index, 0, total - 1);
     if (state.spread) index = index - (index % 2);
