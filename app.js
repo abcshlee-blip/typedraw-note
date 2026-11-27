@@ -2827,7 +2827,7 @@
     navigator.serviceWorker.addEventListener('controllerchange', function () {
       if (!hadController) { hadController = true; return; }   // 첫 설치: 이 화면은 이미 최신
       if (!swUpdated) return;                                  // 단순 인수: 이미 받은 파일로 충분
-      applyUpdate(APP_VERSION);                                // 쓰는 중에 새 워커가 넘겨받았다
+      checkVersion();   // 화면 코드가 서버 버전과 다를 때만 새로고침한다
     });
 
     // 쓰던 중이면 화면이 가려지는 순간(앱을 벗어났다 돌아오는 순간) 새 버전으로 넘어간다
