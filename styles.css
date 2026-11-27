@@ -1124,6 +1124,13 @@ body {
 }
 .btn-solid.danger { background: linear-gradient(#b4432f, #93321f); }
 
+/* 뒤로가기 종료 확인 */
+.exit-box { max-width: 380px; gap: 12px; }
+.exit-box .confirm-text { margin: 0; }
+.exit-box .prompt-actions { align-items: center; margin-top: 2px; }
+.exit-box .text-btn { padding: 8px 14px; font-size: 14px; font-weight: 600; color: #6b5a41; }
+.exit-box .text-btn:active { background: #f2e9d8; }
+
 /* 토스트 */
 .toast {
   position: fixed;
