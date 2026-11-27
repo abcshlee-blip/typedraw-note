@@ -1131,7 +1131,7 @@ body {
   }
   .tools { flex: 1 0 100%; }
   .opt-row { flex: 1 1 0; min-width: 0; padding: 1px 0; }
-  .pager { flex: 0 0 auto; flex-wrap: nowrap; padding: 1px 0; }
+  .pager { flex: 0 0 auto; flex-wrap: nowrap; padding: 1px 0; margin-left: auto; }
 }
 
 /* ═══════════ 인쇄 ═══════════ */
