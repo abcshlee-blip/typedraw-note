@@ -1583,6 +1583,8 @@
 
     state.flipping = true;
     var token = ++flipToken;
+    // 어떤 이유로 끝을 못 짚어도 화면이 잠기지 않도록 안전망
+    setTimeout(function () { if (token === flipToken && state.flipping) cancelFlip(); }, 2500);
 
     Promise.all(jobs).then(function (faces) {
       if (token !== flipToken || !state.nb) return;
