@@ -1000,12 +1000,40 @@
           if (i >= 0) { page.objects.splice(i, 1); renderObjects(pageEl, page); markDirty(); }
         }
       });
-      txt.addEventListener('pointerdown', function (e) { e.stopPropagation(); setActivePage(pageEl); selectObject(pageEl, wrap); });
       wrap.appendChild(buildHandleBar(obj, page, pageEl));
       wrap.appendChild(txt);
       var sh = el('div', 'size-handle');
       wrap.appendChild(sh);
       bindSizeHandle(pageEl, page, obj, wrap, sh);
+
+      /* 문자박스도 마우스로 잡아 옮기기 (v18)
+         · 편집(포커스) 중이 아닐 때: 마우스 왼쪽 버튼으로 눌러 4px 넘게 끌면 사진처럼 옮겨지고,
+           그 안에서 떼면 누른 자리에 커서를 놓아 바로 글자를 입력할 수 있다.
+         · 편집 중에는 글자 위 드래그를 글자 긁기로 그대로 두고, 테두리(패딩)나 위 ⠿ 손잡이를 끌면 옮긴다.
+         · 필기 도구(펜·형광펜·지우개)일 때는 마우스만 옮기기에 쓰고, S펜·손가락은 종이로 통과시켜
+           문자 위에 그대로 필기되게 한다(사진과 같은 규칙). */
+      wrap.addEventListener('pointerdown', function (e) {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;   // 오른쪽·가운데 버튼은 그대로
+        if (isDrawTool() && e.pointerType !== 'mouse') return;     // 팬·손가락 필기는 종이로 넘긴다
+        var t = e.target;
+        if (t && t.closest && (t.closest('.handle-bar') || t.closest('.size-handle'))) return;
+        if (e.pointerType !== 'mouse') {                           // 터치·펜은 예전처럼(탭하면 편집)
+          setActivePage(pageEl);
+          selectObject(pageEl, wrap);
+          return;
+        }
+        setActivePage(pageEl);
+        selectObject(pageEl, wrap);
+        var drawing = isDrawTool();
+        // 편집 중에 글자 위를 누른 것은 글자 긁기(기본 동작)로 둔다
+        if (!drawing && document.activeElement === txt && t === txt && !inTextPadding(txt, e)) return;
+        e.preventDefault();      // 커서 놓기·글자 긁기 기본 동작을 막고 이동 후보로
+        e.stopPropagation();
+        startMove(e, obj, page, pageEl, wrap, {
+          threshold: 4,          // 4px 넘게 끌면 이동, 그 안에서 떼면 클릭
+          onTap: drawing ? null : function (ev) { placeCaretAt(txt, ev.clientX, ev.clientY); }
+        });
+      });
     } else if (obj.type === 'check') {
       wrap.style.width = (obj.w / PW * 100) + '%';
       wrap.appendChild(buildHandleBar(obj, page, pageEl));
@@ -1133,6 +1161,46 @@
     return bar;
   }
 
+  /* 글자 영역(.txt)의 테두리(패딩) 쪽을 눌렀는지 — 편집 중에도 여기를 끌면 옮길 수 있게 */
+  function inTextPadding(txt, e) {
+    var r = txt.getBoundingClientRect();
+    var cs = window.getComputedStyle(txt);
+    var pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
+    var pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+    return e.clientX < r.left + pl || e.clientX > r.right - pr ||
+           e.clientY < r.top + pt || e.clientY > r.bottom - pb;
+  }
+
+  /* 누른 자리에 커서를 놓는다(문자박스 단순 클릭). 위치를 못 찾으면 글자 끝에 둔다. */
+  function placeCaretAt(txt, x, y) {
+    try { txt.focus(); } catch (err) {}
+    var range = null;
+    try {
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(x, y);
+      } else if (document.caretPositionFromPoint) {
+        var pos = document.caretPositionFromPoint(x, y);
+        if (pos && pos.offsetNode) {
+          range = document.createRange();
+          range.setStart(pos.offsetNode, pos.offset);
+          range.collapse(true);
+        }
+      }
+    } catch (err) { range = null; }
+    var sel = window.getSelection();
+    if (!sel) return;
+    if (range && txt.contains(range.startContainer)) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return;
+    }
+    var rng = document.createRange();
+    rng.selectNodeContents(txt);
+    rng.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(rng);
+  }
+
   /* 옮긴 자리 보정 — 사진이 쪽 밖으로 완전히 사라지지 않게 최소 56px은 종이 위에 남긴다 */
   function moveClamp(obj) {
     if (obj.type === 'image') {
@@ -1164,7 +1232,8 @@
   /* 끌어서 옮기기 — 마우스 왼쪽·S펜·손가락이 같은 경로를 쓴다.
      2쪽 보기에서는 사진 중심이 반대쪽 종이로 넘어가면 그 쪽 객체로 옮겨 담는다(v16).
      실제로 움직이기 시작할 때만 되돌리기 기록을 남기고, 놓으면 자동 저장한다. */
-  function startMove(e, obj, page, pageEl, wrapEl) {
+  function startMove(e, obj, page, pageEl, wrapEl, opts) {
+    opts = opts || {};
     var capEl = $('#stage') || document.body;
     var pid = e.pointerId;
     var sx = e.clientX, sy = e.clientY;
@@ -1226,7 +1295,9 @@
       if (ev.pointerId !== pid) return;
       var dx = ev.clientX - sx, dy = ev.clientY - sy;
       if (!moved) {
-        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;   // 눌렀다 뗀 것은 그냥 선택
+        if (opts.threshold) {
+          if (dx * dx + dy * dy < opts.threshold * opts.threshold) return;   // 아직 누른 채 머무름(클릭 후보)
+        } else if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;   // 눌렀다 뗀 것은 그냥 선택
         moved = true;
         originSnap = undoEntry([originPage]);    // 끌기 전 상태
         curPageEl.classList.add('obj-dragging');
@@ -1260,7 +1331,10 @@
       curPageEl.classList.remove('obj-dragging');
       try { capEl.releasePointerCapture(pid); } catch (err) {}
 
-      if (!moved) return;    // 눌렀다 뗀 것 — 선택만
+      if (!moved) {          // 눌렀다 뗀 것 — 선택만(문자박스는 누른 자리에 커서)
+        if (opts.onTap) opts.onTap(ev);
+        return;
+      }
 
       // 놓는 순간의 사진 중심으로 마지막 쪽을 정한다
       var targetEl = pageAtCenter();
@@ -3472,7 +3546,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '17';
+  var APP_VERSION = '18';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)
