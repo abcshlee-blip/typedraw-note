@@ -2667,25 +2667,36 @@
     return base + '-사진' + (n > 0 ? n : '') + '.' + ext;
   }
 
+  /* 클립보드에는 PNG만 올릴 수 있다(크롬은 image/jpeg 쓰기를 거절한다).
+     우리 사진은 JPEG로 담기므로 복사 직전에 PNG로 바꾼다. */
+  function blobToPng(blob) {
+    if (blob && blob.type === 'image/png') return Promise.resolve(blob);
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(blob);
+      var im = new Image();
+      im.onload = function () {
+        var c = document.createElement('canvas');
+        c.width = im.naturalWidth; c.height = im.naturalHeight;
+        c.getContext('2d').drawImage(im, 0, 0);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (png) { png ? resolve(png) : reject(new Error('no blob')); }, 'image/png');
+      };
+      im.onerror = function () { URL.revokeObjectURL(url); reject(new Error('image load')); };
+      im.src = url;
+    });
+  }
+
   function copyImageObj(t) {
     var CI = window.ClipboardItem;
     if (!navigator.clipboard || typeof navigator.clipboard.write !== 'function' || typeof CI !== 'function') {
       toast('이 브라우저에서는 사진 복사를 지원하지 않아요 — [이미지 저장]을 써 주세요');
       return;
     }
-    var blobP = objImageBlob(t.obj);
     var done = function () { toast('사진을 복사했어요 — 다른 곳에 붙여넣기 하세요'); };
     var fail = function () { toast('복사하지 못했어요. 브라우저가 막으면 [이미지 저장]을 써 주세요'); };
-    var writeBlob = function (blob) {
-      var data = {};
-      data[blob.type || 'image/png'] = blob;
-      return navigator.clipboard.write([new CI(data)]);
-    };
-    // 클립보드 쓰기는 '누른 직후'여야 브라우저가 허락한다 — 그래서 블롭 약속을 그대로 넘겨 본다.
-    var first = null;
-    try { first = navigator.clipboard.write([new CI({ 'image/png': blobP })]); } catch (err) { first = null; }
-    if (!first) { blobP.then(writeBlob).then(done).catch(fail); return; }
-    first.then(done).catch(function () { blobP.then(writeBlob).then(done).catch(fail); });
+    objImageBlob(t.obj).then(blobToPng).then(function (png) {
+      return navigator.clipboard.write([new CI({ 'image/png': png })]);
+    }).then(done).catch(fail);
   }
 
   function saveImageObj(t) {
