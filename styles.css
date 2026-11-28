@@ -552,6 +552,8 @@ body {
 
 /* ── 객체 ── */
 .obj { position: absolute; }
+/* 사진은 길게 눌러도 브라우저의 이미지 메뉴·선택이 끼어들지 않게 */
+.obj-image img { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .obj .txt {
   outline: none;
   white-space: pre-wrap;
@@ -960,6 +962,12 @@ body {
 .popover button:hover, .popover button:active { background: #f4ecdc; }
 .popover button.danger { color: #a33a2c; }
 .popover hr { border: 0; border-top: 1px solid #ece1cc; margin: 5px 8px; }
+
+/* 사진 오른쪽 클릭 메뉴(v17) — 커서 자리에 뜨는 작은 메뉴 */
+.img-menu { min-width: 168px; z-index: 66; }
+.img-menu button { padding: 10px 12px; gap: 9px; }
+.img-menu .ico { width: 19px; height: 19px; }
+.img-menu button.danger { font-weight: 700; }
 
 .sheet {
   position: fixed;
