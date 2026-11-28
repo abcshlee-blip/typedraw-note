@@ -579,6 +579,7 @@
   }
 
   function closeNotebook() {
+    closeImgMenu();
     flushSave();
     cancelFlip();
     setBarsCollapsed(false, true);
@@ -1469,6 +1470,7 @@
 
   /* ─────────── 툴바 ─────────── */
   function setTool(tool, silent) {
+    closeImgMenu();
     if (tool !== state.tool) closeStylePopover();
     state.tool = tool;
     $$('.tool[data-tool]').forEach(function (b) {
@@ -1813,6 +1815,7 @@
   function goPage(index, opts) {
     opts = opts || {};
     if (!state.nb) return;
+    closeImgMenu();
     if (state.flipping) cancelFlip();   // 목차처럼 도중에 다른 쪽을 고르면 넘기기를 정리하고 바로 이동한다
     var total = state.nb.pages.length;
     index = clamp(index, 0, total - 1);
@@ -2602,6 +2605,151 @@
     }
   }
 
+  /* ─────────── 사진 오른쪽 클릭 메뉴 (v17) ───────────
+     브라우저 기본 메뉴에는 항목을 넣을 수 없으므로, 사진 위에서 마우스 오른쪽 버튼을 누르면
+     기본 메뉴를 막고 앱 자체 메뉴(이미지 복사·저장·공유 / 삭제)를 커서 자리에 띄운다.
+       · 바깥 누름·Esc·휠로 넘김·도구 바꿈·쪽 넘김·뒤로가기(closeTopOverlay)에서 닫힌다.
+       · 터치로 길게 누를 때는 브라우저 이미지 메뉴만 막고 앱 메뉴는 띄우지 않는다
+         (손가락 필기·사진 선택과 겹치지 않게. 터치는 사진을 탭해 고른 뒤 위 버튼줄로 지운다).
+       · 삭제는 pushUndo로 한 칸 기록한 뒤 지우므로 ↶ 되돌리기로 그대로 살아난다. */
+  var imgMenuTarget = null;        // { page, obj } — 메뉴를 연 사진
+  var lastPointerType = 'mouse';   // 마지막으로 누른 수단(마우스·펜·손가락)
+  var lastPointerAt = 0;           // 그때의 시각 — 키보드 메뉴(Shift+F10)와 구분하려고
+
+  function imgMenuOpen() {
+    var m = $('#imgMenu');
+    return !!(m && !m.hidden);
+  }
+
+  function closeImgMenu() {
+    var m = $('#imgMenu');
+    if (!m || m.hidden) { imgMenuTarget = null; return false; }
+    m.hidden = true;
+    imgMenuTarget = null;
+    return true;
+  }
+
+  function openImgMenu(page, obj, x, y) {
+    var m = $('#imgMenu');
+    if (!m) return;
+    hidePopovers();
+    imgMenuTarget = { page: page, obj: obj };
+    m.style.left = '0px';
+    m.style.top = '0px';
+    m.hidden = false;
+    var mw = m.offsetWidth || 172, mh = m.offsetHeight || 190;
+    var left = clamp(x - 6, 8, Math.max(8, window.innerWidth - mw - 8));
+    var top = y + 4;
+    if (top + mh > window.innerHeight - 8) top = y - mh - 4;      // 아래가 모자라면 커서 위로
+    top = clamp(top, 8, Math.max(8, window.innerHeight - mh - 8));
+    m.style.left = left + 'px';
+    m.style.top = top + 'px';
+  }
+
+  /* 사진 원본(블롭) — IndexedDB에 담아 둔 것을 꺼내고, 없으면 화면 주소에서 받아 온다 */
+  function objImageBlob(obj) {
+    var fromURL = function () {
+      var src = (obj && obj.assetId) ? assetURL(obj.assetId) : (obj && obj.src);
+      if (!src) return Promise.reject(new Error('사진 데이터가 없어요'));
+      return fetch(src).then(function (r) { return r.blob(); });
+    };
+    if (!obj || !obj.assetId) return fromURL();
+    return dbGet('assets', obj.assetId).then(function (rec) {
+      if (rec && rec.blob) return rec.blob;
+      return fromURL();
+    }).catch(fromURL);
+  }
+
+  function imgFileName(page, obj, blob) {
+    var ext = (blob && blob.type === 'image/jpeg') ? 'jpg' : 'png';
+    var base = ((state.nb && state.nb.title) || '노트').replace(/[\\/:*?"<>|]/g, '_');
+    var n = page.objects.indexOf(obj) + 1;
+    return base + '-사진' + (n > 0 ? n : '') + '.' + ext;
+  }
+
+  function copyImageObj(t) {
+    var CI = window.ClipboardItem;
+    if (!navigator.clipboard || typeof navigator.clipboard.write !== 'function' || typeof CI !== 'function') {
+      toast('이 브라우저에서는 사진 복사를 지원하지 않아요 — [이미지 저장]을 써 주세요');
+      return;
+    }
+    var blobP = objImageBlob(t.obj);
+    var done = function () { toast('사진을 복사했어요 — 다른 곳에 붙여넣기 하세요'); };
+    var fail = function () { toast('복사하지 못했어요. 브라우저가 막으면 [이미지 저장]을 써 주세요'); };
+    var writeBlob = function (blob) {
+      var data = {};
+      data[blob.type || 'image/png'] = blob;
+      return navigator.clipboard.write([new CI(data)]);
+    };
+    // 클립보드 쓰기는 '누른 직후'여야 브라우저가 허락한다 — 그래서 블롭 약속을 그대로 넘겨 본다.
+    var first = null;
+    try { first = navigator.clipboard.write([new CI({ 'image/png': blobP })]); } catch (err) { first = null; }
+    if (!first) { blobP.then(writeBlob).then(done).catch(fail); return; }
+    first.then(done).catch(function () { blobP.then(writeBlob).then(done).catch(fail); });
+  }
+
+  function saveImageObj(t) {
+    objImageBlob(t.obj).then(function (blob) {
+      downloadBlob(blob, imgFileName(t.page, t.obj, blob));
+      toast('사진을 저장했어요 — 다운로드 폴더를 확인하세요');
+    }).catch(function () { toast('사진을 저장하지 못했어요'); });
+  }
+
+  function shareImageObj(t) {
+    if (typeof navigator.share !== 'function') {
+      toast('이 브라우저에서는 사진 공유를 지원하지 않아요 — [이미지 저장] 후 보내 주세요');
+      return;
+    }
+    objImageBlob(t.obj).then(function (blob) {
+      var name = imgFileName(t.page, t.obj, blob);
+      var file = null;
+      try { file = new File([blob], name, { type: blob.type || 'image/png' }); } catch (err) { file = null; }
+      if (!file || typeof navigator.canShare !== 'function' || !navigator.canShare({ files: [file] })) {
+        toast('이 브라우저에서는 사진 공유를 지원하지 않아요 — [이미지 저장] 후 보내 주세요');
+        return;
+      }
+      navigator.share({ files: [file], title: (state.nb && state.nb.title) || '노트 사진' }).catch(function (err) {
+        if (err && err.name === 'AbortError') return;    // 사용자가 공유 시트를 그냥 닫은 것
+        toast('공유하지 못했어요');
+      });
+    }).catch(function () { toast('사진을 공유하지 못했어요'); });
+  }
+
+  function deleteImageObj(t) {
+    var page = t.page, obj = t.obj;
+    var i = page.objects.indexOf(obj);
+    if (i < 0) { toast('이미 지워진 사진이에요'); return; }
+    pushUndo(page);                       // ↶ 되돌리기 한 칸 — 지운 사진이 그대로 살아난다
+    page.objects.splice(i, 1);
+    if (state.selected && state.selected.objId === obj.id) state.selected = null;
+    var pageEl = $('#spread .page[data-page-id="' + page.id + '"]');
+    if (pageEl) { renderObjects(pageEl, page); syncHint(page); }
+    markDirty();
+    updateUndoButtons();
+    renderOptions();
+    toast('사진을 삭제했어요 — ↶ 되돌리기로 살릴 수 있어요');
+  }
+
+  function onImageContextMenu(e) {
+    var imgEl = e.target && e.target.closest ? e.target.closest('.obj-image') : null;
+    if (!imgEl) return;
+    e.preventDefault();                 // 브라우저 기본 메뉴(공유·복사·보기)는 띄우지 않는다
+    e.stopPropagation();
+    if (lastPointerType !== 'mouse' || Date.now() - lastPointerAt > 1500) return;   // 터치 길게 누름·키보드 메뉴는 그냥 막기만
+    var pageEl = imgEl.closest('.page');
+    if (!pageEl) return;
+    var page = pageById(pageEl.dataset.pageId);
+    if (!page) return;
+    var obj = null;
+    for (var i = 0; i < (page.objects || []).length; i++) {
+      if (page.objects[i].id === imgEl.dataset.objId) { obj = page.objects[i]; break; }
+    }
+    if (!obj) return;
+    setActivePage(pageEl);
+    selectObject(pageEl, imgEl);          // 메뉴를 연 사진을 골라 둔다(손잡이도 함께 보임)
+    openImgMenu(page, obj, e.clientX, e.clientY);
+  }
+
   function promptText(title, label, value) {
     return new Promise(function (resolve) {
       $('#promptTitle').textContent = title;
@@ -2829,6 +2977,7 @@
   function onStageWheel(e) {
     if ($('#noteView').hidden) return;               // 책장 화면
     if (e.ctrlKey || e.metaKey) return;              // 확대/축소
+    if (closeImgMenu()) { if (e.cancelable) e.preventDefault(); return; }   // 사진 메뉴가 열려 있으면 먼저 닫는다
     if (overlayOpen()) return;                       // 창·서랍·팝오버의 스크롤을 방해하지 않는다
     if (scrollsInside(e.target)) return;
 
@@ -2972,6 +3121,7 @@
     if (!$('#promptModal').hidden) {
       if (activePromptCancel) { activePromptCancel(); return true; }
     }
+    if (closeImgMenu()) return true;
     if (!$('#searchModal').hidden) { closeSearch(); return true; }
     if (!$('#settingsSheet').hidden) { closeSettings(); return true; }
     if (!$('#tocDrawer').hidden) { closeToc(); return true; }
@@ -3224,6 +3374,31 @@
     // 마우스 휠로도 책장을 넘긴다(브라우저 스크롤을 막아야 해서 passive: false)
     stageEl.addEventListener('wheel', onStageWheel, { passive: false });
 
+    // 사진 오른쪽 클릭 메뉴(v17) — 사진 위에서 오른쪽 버튼을 누르면 앱 메뉴가 뜬다
+    document.addEventListener('pointerdown', function (e) {
+      lastPointerType = e.pointerType || 'mouse';
+      lastPointerAt = Date.now();
+    }, true);
+    spread.addEventListener('contextmenu', onImageContextMenu);
+    $('#imgMenu').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-img]');
+      if (!b) return;
+      var what = b.dataset.img;
+      var t = imgMenuTarget;
+      closeImgMenu();
+      if (!t) return;
+      if (what === 'copy') copyImageObj(t);
+      else if (what === 'save') saveImageObj(t);
+      else if (what === 'share') shareImageObj(t);
+      else if (what === 'delete') deleteImageObj(t);
+    });
+    // 바깥을 누르면 닫힌다(메뉴 안을 누를 때는 그대로 둔다)
+    document.addEventListener('pointerdown', function (e) {
+      if (!imgMenuOpen()) return;
+      if (e.target.closest && e.target.closest('#imgMenu')) return;
+      closeImgMenu();
+    }, true);
+
     // 키보드
     document.addEventListener('keydown', function (e) {
       var t = e.target;
@@ -3235,6 +3410,7 @@
         return;
       }
       if (typing || $('#noteView').hidden) return;
+      if (e.key === 'Escape' && closeImgMenu()) return;   // 사진 메뉴가 열려 있으면 그것부터 닫기
       if (e.key === 'Escape' && barsCollapsed()) { setBarsCollapsed(false); return; }
       var k = e.key.toLowerCase();
       if (k === 'v') setTool('select');
@@ -3248,6 +3424,7 @@
 
     // 리사이즈
     window.addEventListener('resize', debounce(function () {
+      closeImgMenu();   // 커서 자리에 떠 있던 사진 메뉴는 위치가 어긋나므로 닫는다
       if ($('#noteView').hidden) return;
       var wasSpread = state.spread;
       var nowSpread = wantSpread();
@@ -3284,7 +3461,7 @@
   }
 
   /* ─────────── 서비스 워커 · 새 버전 ─────────── */
-  var APP_VERSION = '16';
+  var APP_VERSION = '17';
   var UPDATE_KEY = 'typedraw-updated-';
 
   // 필기 중인가(새 버전으로 새로고침하면 안 되는 순간)

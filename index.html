@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Nanum+Myeongjo:wght@400;700&family=Nanum+Pen+Script&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css?v=16" />
+<link rel="stylesheet" href="styles.css?v=17" />
 </head>
 <body>
 
@@ -49,6 +49,8 @@
   <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M9.5 3.5H3.5v6"/><path d="M14.5 3.5h6v6"/><path d="M14.5 20.5h6v-6"/><path d="M9.5 20.5h-6v-6"/></symbol>
   <symbol id="i-unfullscreen" viewBox="0 0 24 24"><path d="M3.5 9.5h6v-6"/><path d="M20.5 9.5h-6v-6"/><path d="M20.5 14.5h-6v6"/><path d="M3.5 14.5h6v6"/></symbol>
   <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="7" r="1.2"/><circle cx="15" cy="7" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="17" r="1.2"/><circle cx="15" cy="17" r="1.2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2"/><path d="M15.5 5.5A2 2 0 0 0 13.5 3.5h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15.5V3.5"/><path d="m7.5 8 4.5-4.5L16.5 8"/><path d="M5 13v5.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V13"/></symbol>
 </svg>
 
 <div id="app">
@@ -72,7 +74,7 @@
       </button>
     </div>
     <footer class="shelf-foot">
-      <span class="shelf-hint">기기에 자동 저장 · 오프라인에서도 열립니다<span id="appVer" class="app-version">· v16</span></span>
+      <span class="shelf-hint">기기에 자동 저장 · 오프라인에서도 열립니다<span id="appVer" class="app-version">· v17</span></span>
       <button id="btnImportTop" class="link-btn" type="button">백업 불러오기</button>
     </footer>
   </section>
@@ -198,6 +200,15 @@
   <button type="button" data-book="delete" class="danger"><svg class="ico"><use href="#i-trash"/></svg>노트 삭제</button>
 </div>
 
+<!-- 사진 오른쪽 클릭 메뉴 (v17) -->
+<div id="imgMenu" class="popover img-menu" role="menu" aria-label="사진 메뉴" hidden>
+  <button type="button" data-img="copy" role="menuitem"><svg class="ico"><use href="#i-copy"/></svg>이미지 복사</button>
+  <button type="button" data-img="save" role="menuitem"><svg class="ico"><use href="#i-down"/></svg>이미지 저장</button>
+  <button type="button" data-img="share" role="menuitem"><svg class="ico"><use href="#i-share"/></svg>이미지 공유</button>
+  <hr />
+  <button type="button" data-img="delete" class="danger" role="menuitem"><svg class="ico"><use href="#i-trash"/></svg>삭제</button>
+</div>
+
 <!-- 노트 설정 시트 -->
 <div id="settingsSheet" class="sheet" hidden>
   <div class="sheet-head">
@@ -308,6 +319,6 @@
 
 <div id="printArea"></div>
 
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>
